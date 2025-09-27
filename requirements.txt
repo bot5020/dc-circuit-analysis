@@ -1,0 +1,38 @@
+# Основные зависимости для анализа цепей
+numpy>=1.21.0
+matplotlib>=3.5.0
+scipy>=1.9.0
+
+# Базовые ML библиотеки
+torch>=2.0.0
+transformers>=4.36.0
+datasets>=2.14.0
+
+# Для оценки моделей (LM Studio API)
+requests>=2.25.0
+
+# Дополнительные утилиты
+huggingface_hub>=0.16.0
+tqdm>=4.64.0
+
+# === ОПЦИОНАЛЬНЫЕ ЗАВИСИМОСТИ ДЛЯ RL ОБУЧЕНИЯ ===
+# Установите ТОЛЬКО если хотите обучать модели локально:
+
+# Для GRPO обучения (основное)
+# pip install trl>=0.8.0 peft>=0.7.0 accelerate>=0.25.0
+
+# Для ускоренной загрузки моделей (рекомендуется)
+# pip install unsloth
+
+# Для GPU квантизации (опционально)
+# pip install bitsandbytes>=0.41.0
+
+# === УСТАНОВКА RL ЗАВИСИМОСТЕЙ ===
+# Минимальный набор:
+# pip install trl peft accelerate
+#
+# Рекомендуемый набор:
+# pip install unsloth trl peft bitsandbytes accelerate
+#
+# Полный набор:
+# pip install torch transformers unsloth trl peft accelerate bitsandbytes
