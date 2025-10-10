@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Dict
 
+# CHECK
 
 class Circuit:
     """Представляет электрическую цепь"""

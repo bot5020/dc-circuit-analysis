@@ -199,7 +199,6 @@ class CircuitGenerator:
             added_resistors += 1
 
         # Шаг 2: Добавляем дополнительные резисторы для сложности
-        remaining_resistors = num_resistors - added_resistors
         attempts = 0
         max_attempts = 50
 
@@ -267,7 +266,6 @@ class CircuitGenerator:
 
     def _is_connected_circuit(self, circuit, nodes):
         """Проверяет связность цепи"""
-        # Простая проверка: есть ли путь от первого узла к последнему
         visited = set()
         stack = [nodes[0]]
 

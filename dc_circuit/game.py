@@ -1,36 +1,79 @@
-from typing import Optional, List
+"""Модуль реализации игры анализа DC цепей.
+
+Содержит класс DCCircuitGame для генерации задач по анализу электрических цепей
+постоянного тока с использованием законов Ома и Кирхгофа.
+"""
+
+from typing import Optional, List, Dict, Any
 
 from base.game import Game
 from base.data import Data
+from base.utils import extract_answer
 from dc_circuit.generator import CircuitGenerator
-from dc_circuit.solver import CircuitSolver
+from dc_circuit.solver import CircuitSolver, Circuit
 from dc_circuit.verifier import DCCircuitVerifier
 from dc_circuit.prompt import create_circuit_prompt
 
 
 class DCCircuitGame(Game):
-    """Игра для анализа цепей постоянного тока"""
+    """Игра для анализа цепей постоянного тока.
     
-    def __init__(self):
+    Реализует генерацию задач по анализу DC цепей с различными типами вопросов:
+    - Расчет тока через резистор
+    - Расчет напряжения на резисторе
+    - Расчет мощности
+    - И другие типы вопросов
+    
+    Attributes:
+        generator: Генератор электрических цепей
+        solver: Решатель цепей (вычисление узловых потенциалов)
+        answer_precision: Количество знаков после запятой в ответах
+    """
+    
+    def __init__(self) -> None:
+        """Инициализирует игру DC Circuit Analysis."""
         super().__init__("DC Circuit Analysis", DCCircuitVerifier)
-        self.generator = CircuitGenerator()
-        self.solver = CircuitSolver()
-        self.answer_precision = 3  # Количество знаков после запятой в ответах
+        self.generator: CircuitGenerator = CircuitGenerator()
+        self.solver: CircuitSolver = CircuitSolver()
+        self.answer_precision: int = 3
     
-    def generate(self, num_of_questions: int = 100, max_attempts: int = 50,
-                 difficulty: Optional[int] = 1, seed: Optional[int] = None, **kwargs) -> List[Data]:
-        """
-        Генерирует задачи анализа DC цепей
-        @param num_of_questions: количество задач
-        @param max_attempts: максимальное количество попыток генерации на задачу
-        @param difficulty: уровень сложности 1-10
-        @return: список объектов Data
-
-        Попытки нужны потому что:
-        1. Генератор может создать некорректную цепь (без резисторов)
-        2. Solver может не решить систему уравнений (особенно для сложных цепей)
-        3. Вычисление ответа может завершиться неудачно
-        4. Могут возникнуть непредвиденные исключения
+    def generate(
+        self, 
+        num_of_questions: int = 100, 
+        max_attempts: int = 50,
+        difficulty: Optional[int] = 1, 
+        seed: Optional[int] = None, 
+        **kwargs: Any
+    ) -> List[Data]:
+        """Генерирует задачи анализа DC цепей.
+        
+        Метод генерирует заданное количество задач по анализу электрических цепей
+        с использованием случайной генерации и валидации корректности.
+        
+        Args:
+            num_of_questions: Количество задач для генерации
+            max_attempts: Максимальное количество попыток генерации одной задачи
+                         (нужно т.к. не все случайные цепи корректны)
+            difficulty: Уровень сложности от 1 до 10 (влияет на количество резисторов,
+                       топологию цепи)
+            seed: Seed для воспроизводимости генерации (опционально)
+            **kwargs: Дополнительные гиперпараметры для прямой настройки генерации
+                     (например, min_resistors=5, max_resistors=10, topology="mixed")
+        
+        Returns:
+            Список объектов Data с сгенерированными задачами
+            
+        Note:
+            Попытки нужны потому что:
+            1. Генератор может создать некорректную цепь (без резисторов)
+            2. Solver может не решить систему уравнений (особенно для сложных цепей)
+            3. Вычисление ответа может завершиться неудачно
+            4. Могут возникнуть непредвиденные исключения
+            
+        Example:
+            >>> game = DCCircuitGame()
+            >>> tasks = game.generate(num_of_questions=10, difficulty=5)
+            >>> print(len(tasks))  # 10
         """
         data_list = []
         
@@ -85,84 +128,57 @@ class DCCircuitGame(Game):
         
         return data_list
     
-    def _calculate_answer(self, circuit, node_voltages, metadata, question_type, target_resistor):
-        """Вычисляет правильный ответ для заданного вопроса"""
-        try:
-            # Находим узлы целевого резистора
-            resistor_info = metadata["resistors"][target_resistor]
-            node1, node2, resistance = resistor_info
+    def _calculate_answer(
+        self, 
+        circuit: Circuit, 
+        node_voltages: Dict[str, float], 
+        metadata: Dict[str, Any], 
+        question_type: str, 
+        target_resistor: str
+    ) -> Optional[float]:
+        """Вычисляет правильный ответ для заданного типа вопроса.
+        
+        Использует Strategy pattern с отдельными калькуляторами для каждого типа вопроса.
+        Калькуляторы определены в модуле dc_circuit.calculators.
+        
+        Args:
+            circuit: Объект Circuit с электрической цепью
+            node_voltages: Словарь узловых потенциалов {node: voltage}
+            metadata: Метаданные цепи (резисторы, источники напряжения и т.д.)
+            question_type: Тип вопроса ("current", "voltage", "power" и т.д.)
+            target_resistor: Название целевого резистора (например, "R1")
+        
+        Returns:
+            Вычисленное значение ответа с заданной точностью или None при ошибке
             
-            # Вычисляем ток через резистор
-            current = self.solver.get_current(circuit, node_voltages, node1, node2)
-            current = abs(current)  # Берем модуль тока
-            
-            if question_type == "current":
-                return round(current, self.answer_precision)
-            elif question_type == "voltage":
-                voltage = current * resistance
-                return round(voltage, self.answer_precision)
-            elif question_type == "power":
-                power = current * current * resistance
-                return round(power, self.answer_precision)
-            elif question_type == "total_current":
-                # Общий ток от источника
-                source_node = metadata.get("source_node", "A")
-                ground_node = metadata.get("ground_node", "C")
-                total_current = self.solver.get_current(circuit, node_voltages, source_node, ground_node)
-                return round(abs(total_current), self.answer_precision)
-            elif question_type == "equivalent_resistance":
-                # Эквивалентное сопротивление всей цепи
-                voltage_source = metadata.get("voltage_source", 10)
-                total_current = self.solver.get_current(circuit, node_voltages,
-                    metadata.get("source_node", "A"), metadata.get("ground_node", "C"))
-                if abs(total_current) > 1e-6:
-                    eq_resistance = voltage_source / abs(total_current)
-                    return round(eq_resistance, self.answer_precision)
-                return None
-            elif question_type == "voltage_divider":
-                # Напряжение на конкретном резисторе в делителе
-                total_resistance = sum(r for _, _, r in metadata["resistors"].values())
-                if total_resistance > 0:
-                    voltage_source = metadata.get("voltage_source", 10)
-                    resistor_info = metadata["resistors"][target_resistor]
-                    _, _, resistance = resistor_info
-                    voltage = voltage_source * resistance / total_resistance
-                    return round(voltage, self.answer_precision)
-                return None
-            elif question_type == "current_divider":
-                # Ток через конкретный резистор в параллельном соединении
-                # Находим параллельные резисторы
-                parallel_resistors = []
-                target_info = metadata["resistors"][target_resistor]
-                target_nodes = set(target_info[:2])
+        Note:
+            Метод lazy-инициализирует реестр калькуляторов при первом вызове.
+            Это позволяет избежать циклических импортов и ускоряет инициализацию.
+        """
 
-                for r_name, (n1, n2, _) in metadata["resistors"].items():
-                    if r_name != target_resistor and set([n1, n2]) == target_nodes:
-                        parallel_resistors.append((n1, n2, metadata["resistors"][r_name][2]))
-
-                if parallel_resistors:
-                    total_conductance = sum(1.0 / r for _, _, r in parallel_resistors)
-                    target_conductance = 1.0 / resistance
-                    total_current = sum(abs(self.solver.get_current(circuit, node_voltages, n1, n2))
-                                      for n1, n2, _ in parallel_resistors[:1])  # Примерный расчет
-
-                    if total_current > 0:
-                        current = total_current * (target_conductance / (target_conductance + total_conductance))
-                        return round(current, self.answer_precision)
-                return None
-            elif question_type == "power_total":
-                # Общая мощность всех резисторов
-                total_power = 0
-                for r_name, (n1, n2, r_val) in metadata["resistors"].items():
-                    current = abs(self.solver.get_current(circuit, node_voltages, n1, n2))
-                    total_power += current * current * r_val
-                return round(total_power, self.answer_precision)
-            else:
-                return round(current, self.answer_precision)
-                
-        except Exception:
-            return None
+        # CHECK:
+        # Lazy initialization калькуляторов для избежания циклических импортов
+        if not hasattr(self, '_calculators'):
+            from dc_circuit.calculators import get_calculator_registry
+            self._calculators = get_calculator_registry(self.solver, self.answer_precision)
+        
+        # Получаем калькулятор для данного типа вопроса
+        calculator = self._calculators.get(question_type)
+        if calculator:
+            return calculator.calculate(circuit, node_voltages, metadata, target_resistor)
+        else: 
+            raise ValueError(f"Unknown question type: {question_type}")
     
     def extract_answer(self, test_solution: str) -> str:
-        """Извлекает ответ из решения агента"""
-        return self.verifier.extract_answer(test_solution)
+        """Извлекает ответ из решения агента.
+        
+        Использует унифицированную функцию из base.utils для консистентности
+        извлечения ответов во всем проекте.
+        
+        Args:
+            test_solution: Полное решение агента (может содержать теги, рассуждения)
+        
+        Returns:
+            Извлеченный ответ как строка
+        """
+        return extract_answer(test_solution)
