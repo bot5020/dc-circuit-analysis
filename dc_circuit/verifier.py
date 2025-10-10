@@ -9,7 +9,6 @@ from typing import Optional
 from base.verifier import Verifier
 from base.data import Data
 from base.utils import extract_answer
-from dc_circuit.solver import CircuitSolver
 
 
 # Константы для верификации
@@ -32,7 +31,6 @@ class DCCircuitVerifier(Verifier):
     абсолютной погрешности. Поддерживает градиентную оценку точности.
     
     Attributes:
-        solver: Решатель цепей (не используется напрямую, но может быть полезен)
         rtol: Относительная погрешность
         atol: Абсолютная погрешность
         precision: Количество знаков после запятой в ответах
@@ -41,7 +39,6 @@ class DCCircuitVerifier(Verifier):
     def __init__(self) -> None:
         """Инициализирует верификатор с настройками погрешности."""
         super().__init__()
-        self.solver: CircuitSolver = CircuitSolver()
         self.rtol: float = RELATIVE_TOLERANCE
         self.atol: float = ABSOLUTE_TOLERANCE
         self.precision: int = ANSWER_PRECISION
@@ -74,11 +71,12 @@ class DCCircuitVerifier(Verifier):
             ]):
                 return False
 
-            # Округляем правильный ответ до заданной точности
+            # Округление значений до заданной точности
             rounded_correct = round(correct_value, self.precision)
+            rounded_agent = round(agent_value, self.precision)
 
-            # Комбинированная проверка: абсолютная + относительная погрешность
-            return abs(agent_value - rounded_correct) <= (self.atol + self.rtol * abs(rounded_correct))
+            # Комбинированная проверка абсолютной и относительной погрешности
+            return abs(rounded_agent - rounded_correct) <= (self.atol + self.rtol * abs(rounded_correct))
 
         except (ValueError, TypeError):
             return False
@@ -86,11 +84,15 @@ class DCCircuitVerifier(Verifier):
     def get_accuracy_score(self, data: Data, test_answer: str) -> float:
         """
         Возвращает точность ответа агента (от 0 до 1)
-        @param data: данные задачи
-        @param test_answer: ответ агента
-        @return: точность от 0 до 1
+
+        Args:
+            data: Данные задачи с правильным ответом
+            test_answer: Ответ агента (может содержать теги, рассуждения)
+        
+        Returns:
+            Точность от 0 до 1
         """
-        # Извлекаем численный ответ из текста агента
+        # Извлечение численного ответа из текста агента
         extracted_answer = self.extract_answer(test_answer)
         if extracted_answer is None:
             return 0.0
@@ -99,23 +101,24 @@ class DCCircuitVerifier(Verifier):
             agent_value = float(extracted_answer)
             correct_value = float(data.answer)
 
-            # Проверка на NaN/inf
+            # Проверка на NaN/inf в значениях
             if any([
                 math.isnan(agent_value), math.isinf(agent_value),
                 math.isnan(correct_value), math.isinf(correct_value)
             ]):
                 return 0.0
 
-            # Округляем правильный ответ до 2 знаков после запятой
+            # Округление значений до одинаковой точности
             rounded_correct = round(correct_value, self.precision)
+            rounded_agent = round(agent_value, self.precision)
 
-            # Вычисляем относительную погрешность
+            # Вычисление относительной погрешности
             if abs(rounded_correct) < 1e-12:  # Избегаем деления на ноль
-                relative_error = abs(agent_value - rounded_correct)
+                relative_error = abs(rounded_agent - rounded_correct)
             else:
-                relative_error = abs(agent_value - rounded_correct) / abs(rounded_correct)
+                relative_error = abs(rounded_agent - rounded_correct) / abs(rounded_correct)
 
-            # Градиентная оценка на основе точности
+            # Градиентная оценка точности
             if relative_error <= THRESHOLD_PERFECT:
                 return 1.0
             elif relative_error <= THRESHOLD_GOOD:
@@ -139,6 +142,6 @@ class DCCircuitVerifier(Verifier):
             test_solution: Текст решения (может содержать теги, рассуждения)
         
         Returns:
-            Извлечённый ответ как строка или None если не удалось извлечь
+            Извлечённый ответ как строку
         """
-        return extract_answer(test_solution) or None
+        return extract_answer(test_solution)

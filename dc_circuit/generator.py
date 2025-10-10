@@ -29,7 +29,7 @@ class CircuitGenerator:
         if seed is not None:
             random.seed(seed)
         base_config = self.difficulty_configs.get(difficulty, self.difficulty_configs[1])
-        # Немутирующее объединение гиперпараметров
+
         config: Dict = {**base_config, **kwargs}
         
         num_resistors = random.randint(config["min_resistors"], config["max_resistors"])

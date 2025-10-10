@@ -62,21 +62,8 @@ class DCCircuitGame(Game):
         
         Returns:
             Список объектов Data с сгенерированными задачами
-            
-        Note:
-            Попытки нужны потому что:
-            1. Генератор может создать некорректную цепь (без резисторов)
-            2. Solver может не решить систему уравнений (особенно для сложных цепей)
-            3. Вычисление ответа может завершиться неудачно
-            4. Могут возникнуть непредвиденные исключения
-            
-        Example:
-            >>> game = DCCircuitGame()
-            >>> tasks = game.generate(num_of_questions=10, difficulty=5)
-            >>> print(len(tasks))  # 10
         """
-        data_list = []
-        
+        data_list = []        
         for _ in range(num_of_questions):
             attempts = 0
             while attempts < max_attempts:
@@ -86,18 +73,18 @@ class DCCircuitGame(Game):
                         difficulty=difficulty, seed=seed, **kwargs
                     )
 
-                    # Проверяем, что цепь корректная
+                    # Проверка, что цепь корректная
                     if not metadata.get("resistors"):
                         attempts += 1
                         continue
 
-                    # Решаем цепь
+                    # Решение цепи
                     node_voltages = self.solver.solve(circuit)
                     if not node_voltages:
                         attempts += 1
                         continue
 
-                    # Вычисляем правильный ответ
+                    # Вычисление правильного ответа
                     target_resistor = metadata["target_resistor"]
                     correct_answer = self._calculate_answer(
                         circuit, node_voltages, metadata, question_type, target_resistor
@@ -110,7 +97,7 @@ class DCCircuitGame(Game):
 
                     question_text = create_circuit_prompt(metadata, question_type, target_resistor)
                     
-                    # Создаем объект данных
+                    # Создание объекта данных
                     data = Data(
                         question=question_text,
                         answer=str(correct_answer),
@@ -150,19 +137,13 @@ class DCCircuitGame(Game):
         
         Returns:
             Вычисленное значение ответа с заданной точностью или None при ошибке
-            
-        Note:
-            Метод lazy-инициализирует реестр калькуляторов при первом вызове.
-            Это позволяет избежать циклических импортов и ускоряет инициализацию.
         """
-
-        # CHECK:
-        # Lazy initialization калькуляторов для избежания циклических импортов
+        
         if not hasattr(self, '_calculators'):
             from dc_circuit.calculators import get_calculator_registry
             self._calculators = get_calculator_registry(self.solver, self.answer_precision)
         
-        # Получаем калькулятор для данного типа вопроса
+        # Получение калькулятора для данного типа вопроса
         calculator = self._calculators.get(question_type)
         if calculator:
             return calculator.calculate(circuit, node_voltages, metadata, target_resistor)

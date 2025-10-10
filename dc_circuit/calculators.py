@@ -275,7 +275,6 @@ class TotalPowerCalculator(AnswerCalculator):
             return None
 
 
-# Фабрика калькуляторов для удобного доступа
 def get_calculator_registry(solver: CircuitSolver, precision: int = 3) -> Dict[str, AnswerCalculator]:
     """Создает реестр калькуляторов для всех типов вопросов.
     
@@ -285,10 +284,6 @@ def get_calculator_registry(solver: CircuitSolver, precision: int = 3) -> Dict[s
     
     Returns:
         Словарь {тип_вопроса: калькулятор}
-        
-    Example:
-        >>> calculators = get_calculator_registry(solver)
-        >>> result = calculators["current"].calculate(circuit, voltages, metadata, "R1")
     """
     return {
         "current": CurrentCalculator(solver, precision),

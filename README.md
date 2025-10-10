@@ -1,11 +1,6 @@
 # 🔌 DC Circuit Analysis Environment
 
-**Полная система анализа электрических цепей постоянного тока с reinforcement learning обучением**
-
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/)
+**Cистема анализа электрических цепей постоянного тока с reinforcement learning обучением**
 
 ---
 
@@ -61,50 +56,6 @@ tbank2/
 
 ---
 
-## 🚀 Быстрый старт
-
-### Вариант 1: Google Colab (рекомендуется)
-
-**Самый простой способ!** Откройте в Colab и запустите:
-
-```python
-# 1. Склонировать репозиторий
-!git clone https://github.com/your-username/tbank2.git
-%cd tbank2
-
-# 2. Установить зависимости
-!pip install -q -r requirements.txt
-
-# 3. Запустить демонстрацию
-!python main.py
-
-# 4. Или начать обучение
-!python training/rl_trainer.py
-```
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/tbank2/blob/main/notebooks/demo.ipynb)
-
-### Вариант 2: Локальная установка
-
-```bash
-# 1. Клонировать репозиторий
-git clone https://github.com/your-username/tbank2.git
-cd tbank2
-
-# 2. Создать виртуальное окружение
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# или
-venv\Scripts\activate     # Windows
-
-# 3. Установить зависимости
-pip install -r requirements.txt
-
-# 4. Запустить
-python main.py
-```
-
----
 
 ## 💡 Примеры использования
 

@@ -1,17 +1,20 @@
 def create_circuit_prompt(metadata: dict, question_type: str, target_resistor: str) -> str:
     """
     Создает промпт для задач анализа DC цепей
-    
-    @param metadata: метаданные цепи
-    @param question_type: тип вопроса (current, voltage, power, и т.д.)
-    @param target_resistor: целевой резистор для анализа
-    @return: промпт на английском языке
+
+    Args:
+        metadata: Метаданные цепи
+        question_type: Тип вопроса (current, voltage, power, и т.д.)
+        target_resistor: Целевой резистор для анализа
+
+    Returns:
+        Промпт на английском языке
     """
     circuit_type = metadata.get("circuit_type", "unknown")
     voltage = metadata.get("voltage_source", 10)
     resistors = metadata.get("resistors", {})
 
-    # Создаем подробное описание цепи
+    # Создание подробного описания цепи
     resistor_details = []
     for r_name, (n1, n2, r_val) in resistors.items():
         resistor_details.append(f"{r_name}={r_val}Ω (between nodes {n1} and {n2})")
@@ -27,7 +30,7 @@ def create_circuit_prompt(metadata: dict, question_type: str, target_resistor: s
     else:
         circuit_desc = f"Complex circuit with voltage source V={voltage}V and resistors: {resistor_list}"
 
-    # Формулируем вопрос
+    # Формулирование вопроса
     if question_type == "current":
         question = f"Find the current through {target_resistor} (in Amperes)"
     elif question_type == "voltage":
@@ -47,57 +50,26 @@ def create_circuit_prompt(metadata: dict, question_type: str, target_resistor: s
     else:
         question = f"Find the {question_type} for {target_resistor}"
 
-    # Создаем полный промпт с всеми правилами
-    prompt = f"""DC Circuit Analysis Problem
+    prompt = f"""You are an expert circuit analysis engineer.
+            Solve electrical circuit problems using physics laws.
 
-Fundamental Laws and Principles:
+            FUNDAMENTAL LAWS:
+            1. Ohm: V=IR, I=V/R
+            2. KCL: ΣI_in=ΣI_out
+            3. KVL: ΣV=0
+            4. Series: R_total=R₁+R₂+..., I_total=I₁=I₂
+            5. Parallel: 1/R_total=1/R₁+1/R₂+..., V_total=V₁=V₂
+            6. Power: P=I²R=V²/R
 
-1. Ohm's Law: V = I × R
-   - Voltage (V) equals Current (I) times Resistance (R)
-   - Can be rearranged: I = V/R or R = V/I
+            Circuit: {circuit_desc}
 
-2. Kirchhoff's Current Law (KCL): 
-   - The sum of currents entering a node equals the sum of currents leaving
-   - ΣI_in = ΣI_out
+            Question: {question}
 
-3. Kirchhoff's Voltage Law (KVL): 
-   - The sum of voltages around any closed loop equals zero
-   - ΣV = 0
+            YOU MUST USE THE FOLLOWING FORMAT:
+            <think>Your step-by-step reasoning</think>
+            <answer>X.XXX</answer>
 
-4. Series Connection:
-   - Same current flows through all resistors: I_total = I₁ = I₂ = I₃
-   - Voltages add up: V_total = V₁ + V₂ + V₃
-   - Total resistance: R_total = R₁ + R₂ + R₃
-
-5. Parallel Connection:
-   - Same voltage across all resistors: V_total = V₁ = V₂ = V₃
-   - Currents add up: I_total = I₁ + I₂ + I₃
-   - Total resistance: 1/R_total = 1/R₁ + 1/R₂ + 1/R₃
-
-6. Power: P = I²R = V²/R = VI
-
-Circuit Description:
-{circuit_desc}
-
-Question to answer:
-{question}
-
-Instructions:
-- Show your reasoning step by step inside <think> tags
-- Apply the appropriate laws (Ohm's Law, KCL, KVL)
-- Provide ONLY the final numerical answer with exactly 3 decimal places inside <answer> tags
-- Do NOT include units in the answer (just the number)
-
-Example Format:
-
-question:
-Find the current through R1 (in Amperes)
-
-solution:
-<think>
-Step 1: Apply Ohm's Law to find current: I = V/R = 12V / 4Ω = 3.000 A
-</think>
-<answer>3.000</answer>
-"""
+            PROVIDE ANSWER WITH EXACTLY 3 DECIMAL PLACES, NO UNITS.
+            """
 
     return prompt
