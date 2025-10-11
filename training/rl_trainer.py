@@ -27,7 +27,7 @@ class TrainingConfig:
     """Настройки обучения"""
     
     # Модель
-    model_name: str = "Qwen/Qwen3-4B-Instruct-2507"
+    model_name: str = "unsloth/Qwen2.5-3B-Instruct"
     output_dir: str = "./dc_circuit_model_rl"
     max_seq_length: int = 8192  
     
@@ -39,7 +39,7 @@ class TrainingConfig:
     # Обучение
     learning_rate: float = 1e-5
     max_steps: int = 100  # Больше шагов для T4
-    batch_size: int = 1  # T4 16GB - только 1!
+    batch_size: int = 1  
     gradient_accumulation_steps: int = 12  # Компенсируем (эфф=12)
     num_generations: int = 4  # Компромисс для T4 
     save_steps: int = 20 
