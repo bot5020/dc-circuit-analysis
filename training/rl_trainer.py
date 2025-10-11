@@ -29,7 +29,7 @@ class TrainingConfig:
     # Модель
     model_name: str = "Qwen/Qwen3-4B-Instruct-2507"
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 8192
+    max_seq_length: int = 4096
     
     # LoRA
     lora_r: int = 64
@@ -87,7 +87,7 @@ class DCCircuitDataset(Dataset):
                         {"role": "user", "content": f"{data.question}\n<gold>{float(data.answer):.3f}</gold>"}
                     ],
                     "question": data.question,
-                    "answer": f"{float(data.answer):.3f}",  # Форматируем до 3 знаков
+                    "answer": f"{float(data.answer):.3f}",
                     "difficulty": data.difficulty
                 } for data in data_list])
             
@@ -120,14 +120,14 @@ class DCCircuitRLTrainer:
         self._verifier = None
 
     def setup_model(self):
-        """Загружает и настраивает модель с LoRA и vLLM."""        
-        print(f"📦 Загрузка модели {self.config.model_name} с vLLM...")
+        """Загружает и настраивает модель с LoRA (vLLM инициализируется позже)."""        
+        print(f"📦 Загрузка модели {self.config.model_name}...")
         
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
-            load_in_4bit=False,  
-            fast_inference=True 
+            load_in_4bit=False,  # vLLM требует FP16
+            fast_inference=False  # НЕ создаём vLLM здесь! Создастся в GRPOTrainer 
         )
         
         # Установка базовогоchat_template если его нет
@@ -341,9 +341,10 @@ class DCCircuitRLTrainer:
         training_args = GRPOConfig(
             use_vllm=True,
             vllm_engine_args={
-                "gpu_memory_utilization": 0.8,  
+                "gpu_memory_utilization": 0.90,  # Увеличили для KV cache
                 "max_model_len": self.config.max_seq_length,
                 "trust_remote_code": True,
+                "enforce_eager": False,  # CUDA graphs для ускорения
             },
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
@@ -357,7 +358,7 @@ class DCCircuitRLTrainer:
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
             max_prompt_length=4096,
-            max_completion_length=2048,
+            max_completion_length=4096,
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
