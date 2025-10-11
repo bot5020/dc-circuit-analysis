@@ -365,9 +365,7 @@ class DCCircuitRLTrainer:
             output_dir=self.config.output_dir,
             temperature=0.7,
             repetition_penalty=1.1,
-            generation_kwargs={
-                "max_new_tokens": 2048,  # Для полных расчётов
-            }
+            # generation_kwargs НЕ НУЖНЫ для vLLM! Он использует max_completion_length
         )
         
         # Создание тренера
