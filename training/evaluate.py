@@ -202,3 +202,189 @@ def generate_evaluation_report(
     json_path = f"{save_dir}/evaluation_results.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(results_data, f, ensure_ascii=False, indent=2)
+    
+    print(f"JSON результаты: {json_path}")
+
+
+def load_model(model_path: str, max_seq_length: int = 3072):
+    """Загружает обученную модель.
+    
+    Args:
+        model_path: Путь к папке с моделью
+        max_seq_length: Максимальная длина последовательности
+    
+    Returns:
+        (model, tokenizer) - загруженная модель и токенизатор
+    """
+    print(f"📥 Загрузка модели из: {model_path}")
+    
+    from unsloth import FastLanguageModel
+    
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=model_path,
+        max_seq_length=max_seq_length,
+        load_in_4bit=False,
+        dtype=None,
+    )
+    
+    # Включаем inference mode
+    FastLanguageModel.for_inference(model)
+    
+    print("✅ Модель загружена!")
+    return model, tokenizer
+
+
+def create_model_generator(model, tokenizer, max_new_tokens: int = 512):
+    """Создаёт функцию генерации для модели.
+    
+    Args:
+        model: Загруженная модель
+        tokenizer: Токенизатор
+        max_new_tokens: Максимальное количество новых токенов
+    
+    Returns:
+        Функция генерации: question -> answer
+    """
+    def generate(question: str) -> str:
+        """Генерирует ответ на вопрос."""
+        # Форматируем промпт
+        messages = [
+            {"role": "system", "content": "You are an expert in DC circuit analysis. IMPORTANT: Show ALL your calculations and reasoning steps, but at the very end, provide the FINAL ANSWER in this exact format: 'The answer is: [numerical_value]'. Do not include units in the final answer format, only the number."},
+            {"role": "user", "content": question}
+        ]
+        
+        # Применяем chat template
+        prompt = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        
+        # Токенизация
+        inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+        
+        # Генерация
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            temperature=0.1,  # Более детерминированный для оценки
+            do_sample=False,
+            pad_token_id=tokenizer.eos_token_id
+        )
+        
+        # Декодирование
+        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
+        # Убираем промпт из ответа
+        if prompt in response:
+            response = response.replace(prompt, "").strip()
+        
+        return response
+    
+    return generate
+
+
+def main():
+    """Основная функция оценки модели."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Оценка обученной модели на DC Circuit Analysis")
+    parser.add_argument("--model_path", type=str, default="./dc_circuit_model_rl", help="Путь к обученной модели")
+    parser.add_argument("--baseline_model", type=str, default="Qwen/Qwen3-4B-Instruct-2507", help="Базовая модель для сравнения")
+    parser.add_argument("--samples_per_difficulty", type=int, default=20, help="Количество задач на уровень сложности")
+    parser.add_argument("--difficulties", type=str, default="1,2,3,4,5", help="Уровни сложности через запятую")
+    parser.add_argument("--output_dir", type=str, default="./evaluation_reports", help="Папка для отчётов")
+    
+    args = parser.parse_args()
+    
+    difficulties = [int(d) for d in args.difficulties.split(",")]
+    
+    print("=" * 80)
+    print("🔬 ОЦЕНКА МОДЕЛИ DC CIRCUIT ANALYSIS")
+    print("=" * 80)
+    
+    # Генерация тестовых данных
+    print("\n📊 Генерация тестовых данных...")
+    game = DCCircuitGame()
+    test_data_by_difficulty = {}
+    
+    for difficulty in difficulties:
+        print(f"  Сложность {difficulty}: генерация {args.samples_per_difficulty} задач...")
+        data = game.generate(
+            num_of_questions=args.samples_per_difficulty,
+            difficulty=difficulty,
+            max_attempts=50
+        )
+        test_data_by_difficulty[difficulty] = data
+        print(f"    ✅ Сгенерировано {len(data)} задач")
+    
+    total_tasks = sum(len(data) for data in test_data_by_difficulty.values())
+    print(f"📊 Всего тестовых задач: {total_tasks}")
+    
+    # Оценка обученной модели
+    print(f"\n🎯 ОЦЕНКА ОБУЧЕННОЙ МОДЕЛИ: {args.model_path}")
+    print("-" * 80)
+    
+    if os.path.exists(args.model_path):
+        trained_model, trained_tokenizer = load_model(args.model_path)
+        trained_generator = create_model_generator(trained_model, trained_tokenizer)
+        
+        trained_results = {}
+        for difficulty, data in test_data_by_difficulty.items():
+            print(f"\n  📝 Сложность {difficulty}:")
+            result = evaluate_model(trained_generator, data, max_samples=len(data))
+            trained_results[difficulty] = result["accuracy"]
+            print(f"    ✅ Точность: {result['accuracy']:.3f} ({result['correct']}/{result['total']})")
+        
+        overall_accuracy = sum(trained_results.values()) / len(trained_results)
+        print(f"\n  🎯 ОБЩАЯ ТОЧНОСТЬ: {overall_accuracy:.3f}")
+    else:
+        print(f"❌ Модель не найдена: {args.model_path}")
+        trained_results = {d: 0.0 for d in difficulties}
+    
+    # Оценка baseline модели (опционально)
+    print(f"\n📊 ОЦЕНКА BASELINE МОДЕЛИ: {args.baseline_model}")
+    print("-" * 80)
+    print("(Загрузка baseline модели...)")
+    
+    try:
+        baseline_model, baseline_tokenizer = load_model(args.baseline_model)
+        baseline_generator = create_model_generator(baseline_model, baseline_tokenizer)
+        
+        baseline_results = {}
+        for difficulty, data in test_data_by_difficulty.items():
+            print(f"\n  📝 Сложность {difficulty}:")
+            result = evaluate_model(baseline_generator, data, max_samples=len(data))
+            baseline_results[difficulty] = result["accuracy"]
+            print(f"    ✅ Точность: {result['accuracy']:.3f} ({result['correct']}/{result['total']})")
+        
+        overall_baseline = sum(baseline_results.values()) / len(baseline_results)
+        print(f"\n  🎯 ОБЩАЯ ТОЧНОСТЬ: {overall_baseline:.3f}")
+        
+    except Exception as e:
+        print(f"⚠️  Ошибка оценки baseline: {e}")
+        print("Пропускаем baseline оценку...")
+        baseline_results = {d: 0.0 for d in difficulties}
+    
+    # Генерация отчёта
+    print("\n" + "=" * 80)
+    print("📈 СРАВНЕНИЕ МОДЕЛЕЙ")
+    print("=" * 80)
+    
+    generate_evaluation_report(
+        baseline_results=baseline_results,
+        trained_results=trained_results,
+        baseline_model=args.baseline_model,
+        trained_model=args.model_path,
+        save_dir=args.output_dir
+    )
+    
+    print("\n" + "=" * 80)
+    print("✅ ОЦЕНКА ЗАВЕРШЕНА!")
+    print("=" * 80)
+    print(f"📁 Отчёты сохранены в: {args.output_dir}")
+
+
+if __name__ == "__main__":
+    main()
+
