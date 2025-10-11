@@ -29,20 +29,20 @@ class TrainingConfig:
     # Модель
     model_name: str = "Qwen/Qwen3-4B-Instruct-2507"
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 4096  # Увеличили обратно для длинных расчетов
+    max_seq_length: int = 8192  
     
     # LoRA
     lora_r: int = 64
     lora_alpha: int = 64
     lora_dropout: float = 0.05
     
-    # Обучение (БЫСТРЫЙ РЕЗУЛЬТАТ ЗА 1 ЧАС!)
+    # Обучение
     learning_rate: float = 1e-5
-    max_steps: int = 60  # 60 шагов за ~1 час - первый видимый результат!
-    batch_size: int = 24  # Еще больше! A100 потянет
-    gradient_accumulation_steps: int = 1  # Не нужно
-    num_generations: int = 4  # Хорошее качество GRPO
-    save_steps: int = 20  # Чаще сохраняем
+    max_steps: int = 60  
+    batch_size: int = 24  
+    gradient_accumulation_steps: int = 1 
+    num_generations: int = 4 
+    save_steps: int = 20 
     
     # Dataset (УВЕЛИЧИЛИ ДЛЯ ЛУЧШЕГО ОБУЧЕНИЯ)
     difficulties: List[int] = None
@@ -341,7 +341,6 @@ class DCCircuitRLTrainer:
         """Настраивает GRPO тренер."""
         train_dataset = DCCircuitDataset(self.config)
         
-        # БЕЗ vLLM - vLLM замораживает модель (trainable%=0)
         training_args = GRPOConfig(
             use_vllm=False, 
             learning_rate=self.config.learning_rate,
@@ -355,15 +354,18 @@ class DCCircuitRLTrainer:
             per_device_train_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
-            max_prompt_length=4096,  # Увеличили для сложных промптов
-            max_completion_length=4096,  # Увеличили для расчетов
+            max_prompt_length=3000, 
+            max_completion_length=7000,  # ЖЁСТКОЕ ограничение генерации!
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
             report_to="none",
             output_dir=self.config.output_dir,
             temperature=0.7,
-            repetition_penalty=1.1
+            repetition_penalty=1.1,
+            generation_kwargs={
+                "eos_token_id": None,  # Auto
+            }
         )
         
         # Создание тренера
