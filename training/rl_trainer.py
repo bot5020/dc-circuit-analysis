@@ -38,10 +38,10 @@ class TrainingConfig:
     
     # Обучение
     learning_rate: float = 1e-5
-    max_steps: int = 60  
-    batch_size: int = 24  
-    gradient_accumulation_steps: int = 1 
-    num_generations: int = 4 
+    max_steps: int = 60  # ~1-1.5 часа
+    batch_size: int = 12  # OOM fix! Уменьшили с 24
+    gradient_accumulation_steps: int = 2  # Компенсируем batch (эфф=24)
+    num_generations: int = 2  # Экономия памяти! Уменьшили с 4 
     save_steps: int = 20 
     
     # Dataset (УВЕЛИЧИЛИ ДЛЯ ЛУЧШЕГО ОБУЧЕНИЯ)
