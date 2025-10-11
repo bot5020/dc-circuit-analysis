@@ -29,7 +29,7 @@ class TrainingConfig:
     # Модель
     model_name: str = "unsloth/Qwen2.5-3B-Instruct"
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 8192  
+    max_seq_length: int = 4096
     
     # LoRA
     lora_r: int = 64
@@ -38,11 +38,11 @@ class TrainingConfig:
     
     # Обучение
     learning_rate: float = 1e-5
-    max_steps: int = 100  # Больше шагов для T4
+    max_steps: int = 50  # Больше шагов для T4
     batch_size: int = 1  
     gradient_accumulation_steps: int = 24  # Компенсируем (эфф=24)
-    num_generations: int = 2  # T4 15GB - максимум 2! 
-    save_steps: int = 20 
+    num_generations: int = 2  # T4 15GB - 1 чтобы batch не увеличивался! 
+    save_steps: int = 25 
     
     # Dataset (УВЕЛИЧИЛИ ДЛЯ ЛУЧШЕГО ОБУЧЕНИЯ)
     difficulties: List[int] = None
@@ -121,17 +121,17 @@ class DCCircuitRLTrainer:
         self._verifier = None
 
     def setup_model(self):
-        """Загружает модель с LoRA (БЕЗ vLLM - иначе trainable%=0)."""        
+        """Загружает модель с LoRA"""        
         print(f"📦 Загрузка модели {self.config.model_name}...")
         
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
-            load_in_4bit=True,  # T4 16GB - ОБЯЗАТЕЛЬНО 4bit!
+            load_in_4bit=True,  
             dtype=None,  # Auto
-            fast_inference=True,  # vLLM для быстрой генерации!
-            max_lora_rank=self.config.lora_r,  # Нужно для vLLM + LoRA
-            gpu_memory_utilization=0.9  # T4 16GB  
+            fast_inference=True,
+            max_lora_rank=self.config.lora_r, 
+            gpu_memory_utilization=0.95  
         )
         
         # Установка базового chat_template если его нет
@@ -344,7 +344,7 @@ class DCCircuitRLTrainer:
         train_dataset = DCCircuitDataset(self.config)
         
         training_args = GRPOConfig(
-            use_vllm=True,  # Включаем vLLM! 2-3x ускорение 🚀 
+            use_vllm=True, 
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
@@ -356,8 +356,8 @@ class DCCircuitRLTrainer:
             per_device_train_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
-            max_prompt_length=2048,  # Ограничение промпта
-            max_completion_length=2048,  # Модель должна показывать расчёты!
+            max_prompt_length=4096, 
+            max_completion_length=4096,
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
@@ -365,7 +365,6 @@ class DCCircuitRLTrainer:
             output_dir=self.config.output_dir,
             temperature=0.7,
             repetition_penalty=1.1,
-            # generation_kwargs НЕ НУЖНЫ для vLLM! Он использует max_completion_length
         )
         
         # Создание тренера
