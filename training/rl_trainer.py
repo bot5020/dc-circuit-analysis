@@ -4,11 +4,6 @@
 import os
 import sys
 
-# ============================================================================
-# vLLM ОТКЛЮЧЕН ДЛЯ T4 15GB - СЛИШКОМ МНОГО ПАМЯТИ!
-# Unsloth игнорирует переменные окружения, поэтому без vLLM стабильнее!
-# ============================================================================
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dataclasses import dataclass
@@ -35,7 +30,7 @@ class TrainingConfig:
     # Модель
     model_name: str = "unsloth/Qwen2.5-3B-Instruct"
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 2048  # Уменьшили для KV cache!
+    max_seq_length: int = 4096  
     
     # LoRA
     lora_r: int = 64
@@ -44,19 +39,19 @@ class TrainingConfig:
     
     # Обучение
     learning_rate: float = 1e-5
-    max_steps: int = 50  # Больше шагов для T4
+    max_steps: int = 50  
     batch_size: int = 1  
     gradient_accumulation_steps: int = 24  # Компенсируем (эфф=24)
-    num_generations: int = 1  # Для vLLM только 1! 
+    num_generations: int = 8  # GRPO требует минимум 2! 
     save_steps: int = 25 
     
-    # Dataset (УВЕЛИЧИЛИ ДЛЯ ЛУЧШЕГО ОБУЧЕНИЯ)
+    # Dataset 
     difficulties: List[int] = None
-    samples_per_difficulty: int = 25  # Уменьшили с 50 для скорости!
+    samples_per_difficulty: int = 25 
     
     def __post_init__(self):
         if self.difficulties is None:
-            self.difficulties = [1, 3, 5]  # Простой, средний, сложный - весь диапазон!
+            self.difficulties = [1, 3, 5]  # Простой, средний, сложный
 
 
 # Глобальный конфиг
@@ -135,8 +130,7 @@ class DCCircuitRLTrainer:
             max_seq_length=self.config.max_seq_length,
             load_in_4bit=True,  
             dtype=None,  # Auto
-            fast_inference=True,  # vLLM ВКЛЮЧЕН!
-            max_lora_rank=self.config.lora_r, 
+            fast_inference=True,
             gpu_memory_utilization=0.5  
         )
         
@@ -350,7 +344,7 @@ class DCCircuitRLTrainer:
         train_dataset = DCCircuitDataset(self.config)
         
         training_args = GRPOConfig(
-            use_vllm=True,  # ВКЛЮЧИЛИ! 
+            use_vllm=True, 
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
@@ -362,8 +356,8 @@ class DCCircuitRLTrainer:
             per_device_train_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
-            max_prompt_length=1024,  # Уменьшили для памяти!
-            max_completion_length=1024,  # Уменьшили для памяти!
+            max_prompt_length=4096,
+            max_completion_length=4096,
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
