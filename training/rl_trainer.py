@@ -36,17 +36,17 @@ class TrainingConfig:
     lora_alpha: int = 64
     lora_dropout: float = 0.05
     
-    # Обучение
+    # Обучение (БЫСТРЫЙ РЕЗУЛЬТАТ ЗА 1 ЧАС!)
     learning_rate: float = 1e-5
-    max_steps: int = 4
-    batch_size: int = 4
-    gradient_accumulation_steps: int = 2
-    num_generations: int = 2
-    save_steps: int = 10
+    max_steps: int = 60  # 60 шагов за ~1 час - первый видимый результат!
+    batch_size: int = 24  # Еще больше! A100 потянет
+    gradient_accumulation_steps: int = 1  # Не нужно
+    num_generations: int = 4  # Хорошее качество GRPO
+    save_steps: int = 20  # Чаще сохраняем
     
-    # Dataset
+    # Dataset (УВЕЛИЧИЛИ ДЛЯ ЛУЧШЕГО ОБУЧЕНИЯ)
     difficulties: List[int] = None
-    samples_per_difficulty: int = 10
+    samples_per_difficulty: int = 50  # Увеличили с 10
     
     def __post_init__(self):
         if self.difficulties is None:
@@ -126,7 +126,8 @@ class DCCircuitRLTrainer:
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
-            load_in_4bit=True,  
+            load_in_4bit=False,  # A100 хватит памяти! FP16 быстрее чем 4bit
+            dtype=None,  # Auto FP16
             fast_inference=False  
         )
         
