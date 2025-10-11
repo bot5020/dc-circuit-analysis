@@ -126,8 +126,8 @@ class DCCircuitRLTrainer:
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
-            load_in_4bit=False,  # vLLM требует FP16
-            fast_inference=False  # НЕ создаём vLLM здесь! Создастся в GRPOTrainer 
+            load_in_4bit=False, 
+            fast_inference=False   
         )
         
         # Установка базовогоchat_template если его нет
@@ -337,13 +337,9 @@ class DCCircuitRLTrainer:
     def setup_trainer(self):
         """Настраивает GRPO тренер."""
         train_dataset = DCCircuitDataset(self.config)
-    
-        # vLLM настройки через переменные окружения (GRPOConfig не принимает vllm_engine_args)
-        import os
-        os.environ["VLLM_GPU_MEMORY_UTILIZATION"] = "0.90"  # Увеличили для KV cache
         
         training_args = GRPOConfig(
-            use_vllm=True,  # Включаем vLLM
+            use_vllm=True, 
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
@@ -364,6 +360,7 @@ class DCCircuitRLTrainer:
             output_dir=self.config.output_dir,
             temperature=0.7,
             repetition_penalty=1.1,
+            use_peft=False
         )
         
         # Создание тренера
