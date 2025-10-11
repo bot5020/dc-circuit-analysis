@@ -27,7 +27,7 @@ class TrainingConfig:
     """Настройки обучения"""
     
     # Модель
-    model_name: str = "Qwen/Qwen2.5-1.5B-Instruct"  # Qwen2.5 поддерживается старой vLLM
+    model_name: str = "Qwen/Qwen3-4B-Instruct-2507" 
     output_dir: str = "./dc_circuit_model_rl"
     max_seq_length: int = 4096
     
@@ -120,32 +120,35 @@ class DCCircuitRLTrainer:
         self._verifier = None
 
     def setup_model(self):
-        """Загружает модель с vLLM (БЕЗ LoRA - обучаем всю модель)."""        
-        print(f"📦 Загрузка модели {self.config.model_name} с vLLM...")
-        
-        # Настройки vLLM
-        import os
-        os.environ["VLLM_GPU_MEMORY_UTILIZATION"] = "0.85"
+        """Загружает модель с LoRA (БЕЗ vLLM - иначе trainable%=0)."""        
+        print(f"📦 Загрузка модели {self.config.model_name}...")
         
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
-            load_in_4bit=False, 
-            fast_inference=True  # Создаём vLLM engine!   
+            load_in_4bit=True,  
+            fast_inference=False  
         )
         
         # Установка базовогоchat_template если его нет
         if self.tokenizer.chat_template is None:
             self.tokenizer.chat_template = "{% for message in messages %}{% if message['role'] == 'user' %}{{ message['content'] }}{% endif %}{% endfor %}"
         
-        # БЕЗ LoRA - обучаем всю модель!
-        self.model.train()
-        print(f"✅ Модель загружена (FP16, БЕЗ LoRA, с vLLM)")
+        # LoRA - обучаем только 4.5% параметров (эффективно!)
+        self.model = FastLanguageModel.get_peft_model(
+            self.model,
+            r=self.config.lora_r,
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                          "gate_proj", "up_proj", "down_proj"],
+            lora_alpha=self.config.lora_alpha,
+            lora_dropout=self.config.lora_dropout,
+            bias="none",
+            use_gradient_checkpointing="unsloth",
+            random_state=3407,
+        )
         
-        # Информация о параметрах
-        total_params = sum(p.numel() for p in self.model.parameters())
-        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        print(f"trainable params: {trainable_params:,} || all params: {total_params:,} || trainable%: {100 * trainable_params / total_params:.4f}")
+        self.model.train()
+        self.model.print_trainable_parameters()
 
     def _extract_prompt_content(self, prompts) -> str:
         """Извлекает содержимое промпта из разных форматов.
@@ -336,9 +339,9 @@ class DCCircuitRLTrainer:
         """Настраивает GRPO тренер."""
         train_dataset = DCCircuitDataset(self.config)
         
-        # vLLM РАБОТАЕТ без LoRA!
+        # БЕЗ vLLM - vLLM замораживает модель (trainable%=0)
         training_args = GRPOConfig(
-            use_vllm=True,  # ✅ Включен! Генерация ~10-15x быстрее! 
+            use_vllm=False, 
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
