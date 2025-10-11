@@ -29,7 +29,7 @@ class TrainingConfig:
     # Модель
     model_name: str = "Qwen/Qwen3-4B-Instruct-2507"
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 4096
+    max_seq_length: int = 4096  # Увеличили обратно для длинных расчетов
     
     # LoRA
     lora_r: int = 64
@@ -84,6 +84,7 @@ class DCCircuitDataset(Dataset):
                 
                 all_data.extend([{
                     "prompt": [
+                        {"role": "system", "content": "You are an expert in DC circuit analysis. IMPORTANT: Show ALL your calculations and reasoning steps, but at the very end, provide the FINAL ANSWER in this exact format: 'The answer is: [numerical_value]'. Do not include units in the final answer format, only the number."},
                         {"role": "user", "content": f"{data.question}\n<gold>{float(data.answer):.3f}</gold>"}
                     ],
                     "question": data.question,
@@ -354,8 +355,8 @@ class DCCircuitRLTrainer:
             per_device_train_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
-            max_prompt_length=4096,
-            max_completion_length=4096,
+            max_prompt_length=4096,  # Увеличили для сложных промптов
+            max_completion_length=4096,  # Увеличили для расчетов
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
