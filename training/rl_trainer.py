@@ -120,12 +120,14 @@ class DCCircuitRLTrainer:
         self._verifier = None
 
     def setup_model(self):
-        """Загружает и настраивает модель с LoRA."""        
+        """Загружает и настраивает модель с LoRA и vLLM."""        
+        print(f"📦 Загрузка модели {self.config.model_name} с vLLM...")
+        
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
-            load_in_4bit=True,
-            fast_inference=False
+            load_in_4bit=False,  
+            fast_inference=True 
         )
         
         # Установка базовогоchat_template если его нет
@@ -337,7 +339,12 @@ class DCCircuitRLTrainer:
         train_dataset = DCCircuitDataset(self.config)
     
         training_args = GRPOConfig(
-            use_vllm=False,
+            use_vllm=True,
+            vllm_engine_args={
+                "gpu_memory_utilization": 0.8,  
+                "max_model_len": self.config.max_seq_length,
+                "trust_remote_code": True,
+            },
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
