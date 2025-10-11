@@ -275,7 +275,7 @@ class DCCircuitRLTrainer:
         train_dataset = DCCircuitDataset(self.config)
     
         training_args = GRPOConfig(
-            use_vllm=False,
+            use_vllm=True,
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
