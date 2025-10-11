@@ -38,19 +38,19 @@ class TrainingConfig:
     
     # Обучение
     learning_rate: float = 1e-5
-    max_steps: int = 60  # ~1-1.5 часа
-    batch_size: int = 12  # OOM fix! Уменьшили с 24
-    gradient_accumulation_steps: int = 2  # Компенсируем batch (эфф=24)
-    num_generations: int = 2  # Экономия памяти! Уменьшили с 4 
+    max_steps: int = 100  # Больше шагов для T4
+    batch_size: int = 1  # T4 16GB - только 1!
+    gradient_accumulation_steps: int = 12  # Компенсируем (эфф=12)
+    num_generations: int = 4  # Компромисс для T4 
     save_steps: int = 20 
     
     # Dataset (УВЕЛИЧИЛИ ДЛЯ ЛУЧШЕГО ОБУЧЕНИЯ)
     difficulties: List[int] = None
-    samples_per_difficulty: int = 50  # Увеличили с 10
+    samples_per_difficulty: int = 30  # Уменьшили с 50 для скорости!
     
     def __post_init__(self):
         if self.difficulties is None:
-            self.difficulties = [1, 2, 3, 4, 5]
+            self.difficulties = [1, 3, 5]  # Простой, средний, сложный - весь диапазон!
 
 
 # Глобальный конфиг
@@ -127,9 +127,11 @@ class DCCircuitRLTrainer:
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
-            load_in_4bit=False,  # A100 хватит памяти! FP16 быстрее чем 4bit
-            dtype=None,  # Auto FP16
-            fast_inference=False  
+            load_in_4bit=True,  # T4 16GB - ОБЯЗАТЕЛЬНО 4bit!
+            dtype=None,  # Auto
+            fast_inference=True,  # vLLM для быстрой генерации!
+            max_lora_rank=self.config.lora_r,  # Нужно для vLLM + LoRA
+            gpu_memory_utilization=0.9  # T4 16GB  
         )
         
         # Установка базового chat_template если его нет
@@ -342,7 +344,7 @@ class DCCircuitRLTrainer:
         train_dataset = DCCircuitDataset(self.config)
         
         training_args = GRPOConfig(
-            use_vllm=False, 
+            use_vllm=True,  # Включаем vLLM! 2-3x ускорение 🚀 
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
@@ -354,8 +356,8 @@ class DCCircuitRLTrainer:
             per_device_train_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
-            max_prompt_length=3000, 
-            max_completion_length=7000,  # ЖЁСТКОЕ ограничение генерации!
+            max_prompt_length=2048,  # Ограничение промпта
+            max_completion_length=2048,  # Модель должна показывать расчёты!
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
@@ -364,7 +366,7 @@ class DCCircuitRLTrainer:
             temperature=0.7,
             repetition_penalty=1.1,
             generation_kwargs={
-                "eos_token_id": None,  # Auto
+                "max_new_tokens": 2048,  # Для полных расчётов
             }
         )
         
