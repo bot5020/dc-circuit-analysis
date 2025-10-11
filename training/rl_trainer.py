@@ -3,6 +3,14 @@
 
 import os
 import sys
+
+# ============================================================================
+# ВАЖНО! ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ ДЛЯ vLLM - ДОЛЖНЫ БЫТЬ ДО ИМПОРТОВ!
+# ============================================================================
+os.environ["VLLM_GPU_MEMORY_UTILIZATION"] = "0.5"  # Уменьшаем! Было 0.89
+os.environ["VLLM_MAX_MODEL_LEN"] = "4096"  # Уменьшаем KV cache!
+os.environ["VLLM_ATTENTION_BACKEND"] = "XFORMERS"  # Для T4 (compute 7.5)
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dataclasses import dataclass
