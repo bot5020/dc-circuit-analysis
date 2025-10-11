@@ -27,7 +27,7 @@ class TrainingConfig:
     """Настройки обучения"""
     
     # Модель
-    model_name: str = "Qwen/Qwen3-4B-Instruct-2507" 
+    model_name: str = "Qwen/Qwen3-4B-Instruct-2507"
     output_dir: str = "./dc_circuit_model_rl"
     max_seq_length: int = 4096
     
