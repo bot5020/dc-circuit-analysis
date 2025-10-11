@@ -298,11 +298,10 @@ class DCCircuitRLTrainer:
             repetition_penalty=1.1,
         )
         
-        # Получаем базовую модель
-        model_for_trainer = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
-        
+        # ВАЖНО: Передаем модель С DataParallel оберткой!
+        # GRPOTrainer должен видеть DataParallel чтобы использовать обе GPU
         self.trainer = GRPOTrainer(
-            model=model_for_trainer,
+            model=self.model,  # ← Передаём как есть, с DataParallel!
             processing_class=self.tokenizer,
             reward_funcs=[self.reward_function],
             args=training_args,
