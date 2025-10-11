@@ -131,7 +131,7 @@ class DCCircuitRLTrainer:
             dtype=None,  # Auto
             fast_inference=True,
             max_lora_rank=self.config.lora_r, 
-            gpu_memory_utilization=0.95  
+            gpu_memory_utilization=0.5  
         )
         
         # Установка базового chat_template если его нет
