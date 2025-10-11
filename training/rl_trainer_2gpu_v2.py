@@ -125,16 +125,17 @@ class DCCircuitRLTrainer:
         print(f"GPU count: {torch.cuda.device_count()}")
 
     def setup_model(self):
-        """Загружает модель БЕЗ DDP - используем DataParallel"""
-        print(f"📦 Загрузка {self.config.model_name}...")
+        """Загружает модель для vLLM с поддержкой 2 GPU"""
+        print(f"📦 Загрузка {self.config.model_name} для vLLM...")
         
-        # Загружаем модель с автоматическим распределением на обе GPU
+        # Для vLLM: НЕ используем load_in_4bit и device_map
+        # vLLM сам управляет распределением по GPU через tensor_parallel
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
-            load_in_4bit=True,
-            fast_inference=False,
-            device_map="balanced"  # Автоматически распределяет на все GPU!
+            load_in_4bit=False,  # vLLM не работает с 4bit!
+            fast_inference=True,  # Включаем для vLLM
+            # Не задаём device_map - vLLM сам управляет GPU
         )
         
         if self.tokenizer.chat_template is None:
@@ -153,9 +154,9 @@ class DCCircuitRLTrainer:
             random_state=3407,
         )
         
-        # НЕ используем DataParallel - device_map="balanced" уже распределил модель!
+        # vLLM будет использовать обе GPU через tensor_parallel
         if torch.cuda.device_count() > 1:
-            print(f"🔗 Модель распределена на {torch.cuda.device_count()} GPU через device_map='balanced'")
+            print(f"🔗 vLLM будет использовать {torch.cuda.device_count()} GPU через tensor parallelism")
         
         self.model.train()
         print("✅ Модель загружена")
@@ -268,8 +269,17 @@ class DCCircuitRLTrainer:
     def setup_trainer(self):
         train_dataset = DCCircuitDataset(self.config)
     
+        # Настройки vLLM для 2 GPU
+        num_gpus = torch.cuda.device_count()
+        
         training_args = GRPOConfig(
-            use_vllm=True,
+            use_vllm=True,  # Включаем vLLM!
+            vllm_engine_args={
+                "tensor_parallel_size": num_gpus,  # Распределяем на обе GPU
+                "gpu_memory_utilization": 0.85,  # Используем 85% памяти
+                "max_model_len": self.config.max_seq_length,
+                "trust_remote_code": True,
+            },
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
