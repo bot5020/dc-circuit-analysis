@@ -130,11 +130,11 @@ class DCCircuitRLTrainer:
             fast_inference=False  
         )
         
-        # Установка базовогоchat_template если его нет
+        # Установка базового chat_template если его нет
         if self.tokenizer.chat_template is None:
             self.tokenizer.chat_template = "{% for message in messages %}{% if message['role'] == 'user' %}{{ message['content'] }}{% endif %}{% endfor %}"
         
-        # LoRA - обучаем только 4.5% параметров (эффективно!)
+        # LoRA обучение
         self.model = FastLanguageModel.get_peft_model(
             self.model,
             r=self.config.lora_r,
@@ -361,8 +361,7 @@ class DCCircuitRLTrainer:
             report_to="none",
             output_dir=self.config.output_dir,
             temperature=0.7,
-            repetition_penalty=1.1,
-            use_peft=False
+            repetition_penalty=1.1
         )
         
         # Создание тренера
