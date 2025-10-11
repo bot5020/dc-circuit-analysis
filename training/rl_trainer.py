@@ -40,13 +40,13 @@ class TrainingConfig:
     learning_rate: float = 1e-5
     max_steps: int = 100  # Больше шагов для T4
     batch_size: int = 1  
-    gradient_accumulation_steps: int = 12  # Компенсируем (эфф=12)
-    num_generations: int = 4  # Компромисс для T4 
+    gradient_accumulation_steps: int = 24  # Компенсируем (эфф=24)
+    num_generations: int = 2  # T4 15GB - максимум 2! 
     save_steps: int = 20 
     
     # Dataset (УВЕЛИЧИЛИ ДЛЯ ЛУЧШЕГО ОБУЧЕНИЯ)
     difficulties: List[int] = None
-    samples_per_difficulty: int = 30  # Уменьшили с 50 для скорости!
+    samples_per_difficulty: int = 25  # Уменьшили с 50 для скорости!
     
     def __post_init__(self):
         if self.difficulties is None:
