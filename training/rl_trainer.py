@@ -338,14 +338,12 @@ class DCCircuitRLTrainer:
         """Настраивает GRPO тренер."""
         train_dataset = DCCircuitDataset(self.config)
     
+        # vLLM настройки через переменные окружения (GRPOConfig не принимает vllm_engine_args)
+        import os
+        os.environ["VLLM_GPU_MEMORY_UTILIZATION"] = "0.90"  # Увеличили для KV cache
+        
         training_args = GRPOConfig(
-            use_vllm=True,
-            vllm_engine_args={
-                "gpu_memory_utilization": 0.90,  # Увеличили для KV cache
-                "max_model_len": self.config.max_seq_length,
-                "trust_remote_code": True,
-                "enforce_eager": False,  # CUDA graphs для ускорения
-            },
+            use_vllm=True,  # Включаем vLLM
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
