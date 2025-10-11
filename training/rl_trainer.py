@@ -3,6 +3,7 @@
 
 import os
 import sys
+import torch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -42,7 +43,7 @@ class TrainingConfig:
     max_steps: int = 50  
     batch_size: int = 1  
     gradient_accumulation_steps: int = 24  # Компенсируем (эфф=24)
-    num_generations: int = 8  # GRPO требует минимум 2! 
+    num_generations: int = 4  # GRPO минимум 2! Больше = OOM на T4 
     save_steps: int = 25 
     
     # Dataset 
@@ -343,6 +344,10 @@ class DCCircuitRLTrainer:
         """Настраивает GRPO тренер."""
         train_dataset = DCCircuitDataset(self.config)
         
+        # Определяем количество GPU для DDP
+        num_gpus = torch.cuda.device_count()
+        print(f"🎯 Обнаружено GPU: {num_gpus}")
+        
         training_args = GRPOConfig(
             use_vllm=True, 
             learning_rate=self.config.learning_rate,
@@ -356,8 +361,8 @@ class DCCircuitRLTrainer:
             per_device_train_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
-            max_prompt_length=4096,
-            max_completion_length=4096,
+            max_prompt_length=1024,  # Уменьшили для памяти!
+            max_completion_length=1024,  # Уменьшили для памяти!
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
@@ -365,6 +370,8 @@ class DCCircuitRLTrainer:
             output_dir=self.config.output_dir,
             temperature=0.7,
             repetition_penalty=1.1,
+            # Multi-GPU DDP support
+            ddp_find_unused_parameters=False if num_gpus > 1 else None,
         )
         
         # Создание тренера
@@ -381,6 +388,14 @@ class DCCircuitRLTrainer:
     def train(self):
         """Запускает обучение."""
         try:
+            num_gpus = torch.cuda.device_count()
+            if num_gpus > 1:
+                print(f"\n🚀 Используем {num_gpus} GPU с DDP!")
+                print(f"   Эффективный batch = {self.config.batch_size} × {num_gpus} × {self.config.gradient_accumulation_steps} = {self.config.batch_size * num_gpus * self.config.gradient_accumulation_steps}")
+            else:
+                print(f"\n🚀 Используем 1 GPU")
+                print(f"   Эффективный batch = {self.config.batch_size} × {self.config.gradient_accumulation_steps} = {self.config.batch_size * self.config.gradient_accumulation_steps}")
+            
             self.model.train()
             self.trainer.train()
             
