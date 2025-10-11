@@ -128,13 +128,13 @@ class DCCircuitRLTrainer:
         """Загружает модель БЕЗ DDP - используем DataParallel"""
         print(f"📦 Загрузка {self.config.model_name}...")
         
-        # Загружаем модель на GPU 0
+        # Загружаем модель с автоматическим распределением на обе GPU
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
             load_in_4bit=True,
             fast_inference=False,
-            device_map="cuda:0"  # Явно на GPU 0
+            device_map="balanced"  # Автоматически распределяет на все GPU!
         )
         
         if self.tokenizer.chat_template is None:
@@ -153,19 +153,13 @@ class DCCircuitRLTrainer:
             random_state=3407,
         )
         
-        # ВАРИАНТ 1: Если есть 2+ GPU - используем DataParallel
+        # НЕ используем DataParallel - device_map="balanced" уже распределил модель!
         if torch.cuda.device_count() > 1:
-            print(f"🔗 Используем {torch.cuda.device_count()} GPU через DataParallel")
-            self.model = torch.nn.DataParallel(self.model)
+            print(f"🔗 Модель распределена на {torch.cuda.device_count()} GPU через device_map='balanced'")
         
         self.model.train()
         print("✅ Модель загружена")
-        
-        # Print trainable parameters
-        if hasattr(self.model, 'module'):
-            self.model.module.print_trainable_parameters()
-        else:
-            self.model.print_trainable_parameters()
+        self.model.print_trainable_parameters()
 
     def _extract_prompt_content(self, prompts) -> str:
         if not prompts:
@@ -298,10 +292,9 @@ class DCCircuitRLTrainer:
             repetition_penalty=1.1,
         )
         
-        # ВАЖНО: Передаем модель С DataParallel оберткой!
-        # GRPOTrainer должен видеть DataParallel чтобы использовать обе GPU
+        # Передаём модель напрямую (уже распределена через device_map)
         self.trainer = GRPOTrainer(
-            model=self.model,  # ← Передаём как есть, с DataParallel!
+            model=self.model,
             processing_class=self.tokenizer,
             reward_funcs=[self.reward_function],
             args=training_args,
