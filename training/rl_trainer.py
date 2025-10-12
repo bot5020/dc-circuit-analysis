@@ -37,8 +37,8 @@ class TrainingConfig:
     max_seq_length: int = 8192  
     
     # LoRA
-    lora_r: int = 128  # Больше rank для 4B модели
-    lora_alpha: int = 128  # Соответствует r для оптимального соотношения
+    lora_r: int = 64  # Максимальный rank для этой модели
+    lora_alpha: int = 64  # Соответствует r для оптимального соотношения
     lora_dropout: float = 0.05
     
     # Обучение
