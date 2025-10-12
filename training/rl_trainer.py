@@ -49,12 +49,12 @@ class TrainingConfig:
     lora_alpha: int = 64  # Соответствует r для оптимального соотношения
     lora_dropout: float = 0.05
     
-    # Обучение
+    # Обучение - МИНИМАЛЬНЫЕ НАСТРОЙКИ ДЛЯ СТАБИЛЬНОСТИ
     learning_rate: float = 3e-5  # Немного уменьшен для стабильности
     max_steps: int = 200  # Увеличено для качественного RL обучения
-    batch_size: int = 1  # Стабильный batch для 4B модели
-    gradient_accumulation_steps: int = 8  # Меньше для экономии памяти (эфф=8)
-    num_generations: int = 4  # Лучше exploration с 4 генерациями
+    batch_size: int = 1  # Минимум
+    gradient_accumulation_steps: int = 2  # Минимум для экономии памяти (эфф=2)
+    num_generations: int = 3  # Минимум для GRPO, меньше памяти
     save_steps: int = 25 
     
     # Dataset
