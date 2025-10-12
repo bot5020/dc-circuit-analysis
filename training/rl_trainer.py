@@ -4,9 +4,17 @@
 import os
 import sys
 import torch
+import gc
 
 # Настройки для экономии памяти CUDA
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+
+def print_gpu_memory():
+    """Выводит информацию о памяти GPU"""
+    if torch.cuda.is_available():
+        allocated = torch.cuda.memory_allocated() / 1024**3
+        reserved = torch.cuda.memory_reserved() / 1024**3
+        print(f"🧠 GPU Memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -32,9 +40,9 @@ class TrainingConfig:
     """Настройки обучения"""
     
     # Модель - МАТЕМАТИЧЕСКАЯ СПЕЦИАЛИЗАЦИЯ
-    model_name: str = "unsloth/Qwen3-4B-Instruct-2507"  
+    model_name: str = "unsloth/Qwen3-4B-Thinking-2507"  
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 8192  
+    max_seq_length: int = 12192  
     
     # LoRA
     lora_r: int = 64  # Максимальный rank для этой модели
@@ -405,8 +413,15 @@ class DCCircuitRLTrainer:
         
         if not correct_answer:
             return [0.0] * len(responses)
-        
-        return self._calculate_rewards(correct_answer, responses)
+
+        rewards = self._calculate_rewards(correct_answer, responses)
+
+        # Отладка: выводим rewards для понимания почему loss=0
+        if self._should_log_step(getattr(kwargs.get('trainer_state'), 'global_step', 0)):
+            print(f"🔍 Rewards: {rewards}")
+            print(f"🔍 Mean reward: {sum(rewards)/len(rewards):.4f}")
+
+        return rewards
 
     def setup_trainer(self):
         """Настраивает GRPO тренер."""
@@ -430,7 +445,7 @@ class DCCircuitRLTrainer:
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
             max_prompt_length=4096,  # Полная длина для качества
-            max_completion_length=4096,  # Полная длина для качества
+            max_completion_length=8192,  # Полная длина для качества
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
@@ -471,16 +486,33 @@ class DCCircuitRLTrainer:
             self.tokenizer.save_pretrained(self.config.output_dir)
             
         except KeyboardInterrupt:
+            print("\n⏹️  Прерывание обучения, сохраняем чекпоинт...")
             checkpoint_dir = f"{self.config.output_dir}/checkpoint"
             os.makedirs(checkpoint_dir, exist_ok=True)
             self.trainer.save_model(checkpoint_dir)
             self.tokenizer.save_pretrained(checkpoint_dir)
+            print_gpu_memory()
         except Exception as e:
             print(f"\n❌ Ошибка: {e}")
+            print_gpu_memory()
             raise
+        finally:
+            # Очистка памяти
+            if hasattr(self, 'model') and self.model is not None:
+                del self.model
+            if hasattr(self, 'trainer') and self.trainer is not None:
+                del self.trainer
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+            print("🧹 Память очищена")
+            print_gpu_memory()
 
     def run(self):
         """Полный цикл обучения."""
+        print("🚀 Запуск обучения GRPO")
+        print_gpu_memory()
+
         # Создаем файл для детального логирования
         with open("training_detailed_log.txt", "w", encoding="utf-8") as f:
             f.write("🚀 НАЧАЛО ОБУЧЕНИЯ GRPO\n")
@@ -489,7 +521,13 @@ class DCCircuitRLTrainer:
             f.write("="*80 + "\n\n")
 
         self.setup_model()
+        print("✅ Модель загружена")
+        print_gpu_memory()
+
         self.setup_trainer()
+        print("✅ Тренер настроен")
+        print_gpu_memory()
+
         self.train()
 
 if __name__ == "__main__":    
