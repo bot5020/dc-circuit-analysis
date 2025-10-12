@@ -135,7 +135,7 @@ class DCCircuitRLTrainer:
             load_in_4bit=True,  
             dtype=None,  # Auto
             fast_inference=True,
-            gpu_memory_utilization=0.15  
+            gpu_memory_utilization=0.25  
         )
         
         # Установка базового chat_template если его нет
