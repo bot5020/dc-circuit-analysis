@@ -31,24 +31,24 @@ class TrainingConfig:
     # Модель
     model_name: str = "unsloth/Qwen2.5-3B-Instruct"
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 4096  
+    max_seq_length: int = 8192  
     
     # LoRA
-    lora_r: int = 64
-    lora_alpha: int = 64
+    lora_r: int = 128  # Увеличено для лучшего fine-tuning
+    lora_alpha: int = 128  # Увеличено соответственно
     lora_dropout: float = 0.05
     
     # Обучение
-    learning_rate: float = 1e-5
-    max_steps: int = 50  
-    batch_size: int = 1  
-    gradient_accumulation_steps: int = 24  # Компенсируем (эфф=24)
-    num_generations: int = 4  # GRPO минимум 2! Больше = OOM на T4 
+    learning_rate: float = 5e-5  # Увеличено для более агрессивного обучения
+    max_steps: int = 200  # Увеличено для качественного RL обучения
+    batch_size: int = 4
+    gradient_accumulation_steps: int = 64  # Увеличено для большего эффективного batch size (эфф=64)
+    num_generations: int = 4  # Увеличено для лучшего exploration 
     save_steps: int = 25 
     
-    # Dataset 
+    # Dataset
     difficulties: List[int] = None
-    samples_per_difficulty: int = 25 
+    samples_per_difficulty: int = 100  # Увеличено для большего датасета 
     
     def __post_init__(self):
         if self.difficulties is None:
@@ -361,8 +361,8 @@ class DCCircuitRLTrainer:
             per_device_train_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
-            max_prompt_length=1024,  # Уменьшили для памяти!
-            max_completion_length=1024,  # Уменьшили для памяти!
+            max_prompt_length=4096,  # Уменьшили для памяти!
+            max_completion_length=4096,  # Уменьшили для памяти!
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
@@ -370,8 +370,7 @@ class DCCircuitRLTrainer:
             output_dir=self.config.output_dir,
             temperature=0.7,
             repetition_penalty=1.1,
-            # Multi-GPU DDP support
-            ddp_find_unused_parameters=False if num_gpus > 1 else None,
+
         )
         
         # Создание тренера
