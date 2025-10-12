@@ -31,21 +31,21 @@ from dc_circuit.verifier import DCCircuitVerifier
 class TrainingConfig:
     """Настройки обучения"""
     
-    # Модель
-    model_name: str = "unsloth/Qwen2.5-3B-Instruct"
+    # Модель - МАТЕМАТИЧЕСКАЯ СПЕЦИАЛИЗАЦИЯ
+    model_name: str = "unsloth/Qwen3-4B-Thinking-2507-GGUF"  
     output_dir: str = "./dc_circuit_model_rl"
     max_seq_length: int = 8192  
     
     # LoRA
-    lora_r: int = 64  # Максимальный rank для этой модели
-    lora_alpha: int = 64  # Соответствует r для оптимального соотношения
+    lora_r: int = 128  # Больше rank для 4B модели
+    lora_alpha: int = 128  # Соответствует r для оптимального соотношения
     lora_dropout: float = 0.05
     
     # Обучение
-    learning_rate: float = 5e-5  # Увеличено для более агрессивного обучения
+    learning_rate: float = 3e-5  # Немного уменьшен для стабильности
     max_steps: int = 200  # Увеличено для качественного RL обучения
-    batch_size: int = 1  # Минимальный batch для стабильности
-    gradient_accumulation_steps: int = 16  # Эффективный batch = 16
+    batch_size: int = 1  # Стабильный batch для 4B модели
+    gradient_accumulation_steps: int = 8  # Меньше для экономии памяти (эфф=8)
     num_generations: int = 4  # Лучше exploration с 4 генерациями
     save_steps: int = 25 
     
