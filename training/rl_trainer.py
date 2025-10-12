@@ -36,7 +36,7 @@ class TrainingConfig:
     # Модель - МАТЕМАТИЧЕСКАЯ СПЕЦИАЛИЗАЦИЯ
     model_name: str = "unsloth/Qwen3-4B-Instruct-2507"  
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 15000  
+    max_seq_length: int = 13000  
     
     # LoRA
     lora_r: int = 64  # Максимальный rank для этой модели
@@ -46,9 +46,9 @@ class TrainingConfig:
     # Обучение - МИНИМАЛЬНЫЕ НАСТРОЙКИ ДЛЯ СТАБИЛЬНОСТИ
     learning_rate: float = 1e-5  # Немного уменьшен для стабильности
     max_steps: int = 100  # Увеличено для качественного RL обучения
-    batch_size: int = 4  # Минимум
-    gradient_accumulation_steps: int = 4  # Минимум для экономии памяти (эфф=2)
-    num_generations: int = 8  # Минимум для GRPO, меньше памяти
+    batch_size: int = 2  # Минимум
+    gradient_accumulation_steps: int = 2  # Минимум для экономии памяти (эфф=2)
+    num_generations: int = 4  # Минимум для GRPO, меньше памяти
     save_steps: int = 25 
     
     # Dataset
@@ -135,7 +135,7 @@ class DCCircuitRLTrainer:
             load_in_4bit=True,  
             dtype=None,  # Auto
             fast_inference=True,
-            gpu_memory_utilization=0.25  
+            gpu_memory_utilization=0.23  
         )
         
         # Установка базового chat_template если его нет
