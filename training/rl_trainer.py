@@ -36,24 +36,24 @@ class TrainingConfig:
     # Модель - МАТЕМАТИЧЕСКАЯ СПЕЦИАЛИЗАЦИЯ
     model_name: str = "unsloth/Qwen3-4B-Instruct-2507"  
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 10192  
+    max_seq_length: int = 15000  
     
     # LoRA
-    lora_r: int = 32  # Максимальный rank для этой модели
-    lora_alpha: int = 32  # Соответствует r для оптимального соотношения
+    lora_r: int = 64  # Максимальный rank для этой модели
+    lora_alpha: int = 64  # Соответствует r для оптимального соотношения
     lora_dropout: float = 0.05
     
     # Обучение - МИНИМАЛЬНЫЕ НАСТРОЙКИ ДЛЯ СТАБИЛЬНОСТИ
-    learning_rate: float = 3e-5  # Немного уменьшен для стабильности
+    learning_rate: float = 1e-5  # Немного уменьшен для стабильности
     max_steps: int = 100  # Увеличено для качественного RL обучения
-    batch_size: int = 1  # Минимум
-    gradient_accumulation_steps: int = 2  # Минимум для экономии памяти (эфф=2)
-    num_generations: int = 4  # Минимум для GRPO, меньше памяти
+    batch_size: int = 4  # Минимум
+    gradient_accumulation_steps: int = 4  # Минимум для экономии памяти (эфф=2)
+    num_generations: int = 8  # Минимум для GRPO, меньше памяти
     save_steps: int = 25 
     
     # Dataset
     difficulties: List[int] = None
-    samples_per_difficulty: int = 50  # Увеличено для большего датасета 
+    samples_per_difficulty: int = 100  # Увеличено для большего датасета 
     
     def __post_init__(self):
         if self.difficulties is None:
@@ -135,7 +135,7 @@ class DCCircuitRLTrainer:
             load_in_4bit=True,  
             dtype=None,  # Auto
             fast_inference=True,
-            gpu_memory_utilization=0.3  
+            gpu_memory_utilization=0.15  
         )
         
         # Установка базового chat_template если его нет
@@ -436,7 +436,7 @@ class DCCircuitRLTrainer:
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
             max_prompt_length=4096,  # Полная длина для качества
-            max_completion_length=8192,  # Полная длина для качества
+            max_completion_length=10000,  # Полная длина для качества
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
