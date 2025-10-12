@@ -5,6 +5,9 @@ import os
 import sys
 import torch
 
+# Настройки для экономии памяти CUDA
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dataclasses import dataclass
@@ -41,9 +44,9 @@ class TrainingConfig:
     # Обучение
     learning_rate: float = 5e-5  # Увеличено для более агрессивного обучения
     max_steps: int = 200  # Увеличено для качественного RL обучения
-    batch_size: int = 4
-    gradient_accumulation_steps: int = 64  # Увеличено для большего эффективного batch size (эфф=64)
-    num_generations: int = 4  # Увеличено для лучшего exploration 
+    batch_size: int = 2  # Уменьшено для экономии памяти
+    gradient_accumulation_steps: int = 32  # Уменьшено для стабильности (эфф=32)
+    num_generations: int = 4  # Уменьшено для экономии памяти
     save_steps: int = 25 
     
     # Dataset
@@ -361,8 +364,8 @@ class DCCircuitRLTrainer:
             per_device_train_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
-            max_prompt_length=4096,  # Уменьшили для памяти!
-            max_completion_length=4096,  # Уменьшили для памяти!
+            max_prompt_length=4096,  # Ещё уменьшили для памяти!
+            max_completion_length=4096,  # Ещё уменьшили для памяти!
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
