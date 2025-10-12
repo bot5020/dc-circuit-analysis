@@ -9,12 +9,6 @@ import gc
 # Настройки для экономии памяти CUDA
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
-def print_gpu_memory():
-    """Выводит информацию о памяти GPU"""
-    if torch.cuda.is_available():
-        allocated = torch.cuda.memory_allocated() / 1024**3
-        reserved = torch.cuda.memory_reserved() / 1024**3
-        print(f"🧠 GPU Memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -25,7 +19,7 @@ from torch.utils.data import Dataset
 from unsloth import FastLanguageModel
 from trl import GRPOTrainer, GRPOConfig
 
-from base.utils import extract_answer
+from base.utils import extract_answer, get_system_prompt
 from base.data import Data
 from dc_circuit.game import DCCircuitGame
 from dc_circuit.verifier import DCCircuitVerifier
@@ -40,18 +34,18 @@ class TrainingConfig:
     """Настройки обучения"""
     
     # Модель - МАТЕМАТИЧЕСКАЯ СПЕЦИАЛИЗАЦИЯ
-    model_name: str = "unsloth/Qwen3-4B-Thinking-2507"  
+    model_name: str = "unsloth/Qwen3-4B-Instruct-2507"  
     output_dir: str = "./dc_circuit_model_rl"
-    max_seq_length: int = 12192  
+    max_seq_length: int = 10192  
     
     # LoRA
-    lora_r: int = 64  # Максимальный rank для этой модели
-    lora_alpha: int = 64  # Соответствует r для оптимального соотношения
+    lora_r: int = 32  # Максимальный rank для этой модели
+    lora_alpha: int = 32  # Соответствует r для оптимального соотношения
     lora_dropout: float = 0.05
     
     # Обучение - МИНИМАЛЬНЫЕ НАСТРОЙКИ ДЛЯ СТАБИЛЬНОСТИ
     learning_rate: float = 3e-5  # Немного уменьшен для стабильности
-    max_steps: int = 200  # Увеличено для качественного RL обучения
+    max_steps: int = 100  # Увеличено для качественного RL обучения
     batch_size: int = 1  # Минимум
     gradient_accumulation_steps: int = 2  # Минимум для экономии памяти (эфф=2)
     num_generations: int = 3  # Минимум для GRPO, меньше памяти
@@ -59,7 +53,7 @@ class TrainingConfig:
     
     # Dataset
     difficulties: List[int] = None
-    samples_per_difficulty: int = 100  # Увеличено для большего датасета 
+    samples_per_difficulty: int = 50  # Увеличено для большего датасета 
     
     def __post_init__(self):
         if self.difficulties is None:
@@ -93,11 +87,10 @@ class DCCircuitDataset(Dataset):
                     difficulty=difficulty,
                     max_attempts=30
                 )
-                print(f"✅ Сгенерировано {len(data_list)} элементов")
                 
                 all_data.extend([{
                     "prompt": [
-                        {"role": "system", "content": "You are an expert in DC circuit analysis. IMPORTANT: Show ALL your calculations and reasoning steps, but at the very end, provide the FINAL ANSWER in this exact format: 'The answer is: [numerical_value]'. Do not include units in the final answer format, only the number."},
+                        {"role": "system", "content": get_system_prompt()},
                         {"role": "user", "content": f"{data.question}\n<gold>{float(data.answer):.3f}</gold>"}
                     ],
                     "question": data.question,
@@ -106,7 +99,6 @@ class DCCircuitDataset(Dataset):
                 } for data in data_list])
             
             self._data_cache = all_data
-            print(f"📊 Всего в датасете: {len(all_data)} элементов")
         
         return self._data_cache
 
@@ -428,8 +420,7 @@ class DCCircuitRLTrainer:
         train_dataset = DCCircuitDataset(self.config)
         
         # Определяем количество GPU для DDP
-        num_gpus = torch.cuda.device_count()
-        print(f"🎯 Обнаружено GPU: {num_gpus}")
+
         
         training_args = GRPOConfig(
             use_vllm=True,  # Включаем vLLM для качества
@@ -471,12 +462,6 @@ class DCCircuitRLTrainer:
         """Запускает обучение."""
         try:
             num_gpus = torch.cuda.device_count()
-            if num_gpus > 1:
-                print(f"\n🚀 Используем {num_gpus} GPU с DDP!")
-                print(f"   Эффективный batch = {self.config.batch_size} × {num_gpus} × {self.config.gradient_accumulation_steps} = {self.config.batch_size * num_gpus * self.config.gradient_accumulation_steps}")
-            else:
-                print(f"\n🚀 Используем 1 GPU")
-                print(f"   Эффективный batch = {self.config.batch_size} × {self.config.gradient_accumulation_steps} = {self.config.batch_size * self.config.gradient_accumulation_steps}")
             
             self.model.train()
             self.trainer.train()
@@ -486,15 +471,11 @@ class DCCircuitRLTrainer:
             self.tokenizer.save_pretrained(self.config.output_dir)
             
         except KeyboardInterrupt:
-            print("\n⏹️  Прерывание обучения, сохраняем чекпоинт...")
             checkpoint_dir = f"{self.config.output_dir}/checkpoint"
             os.makedirs(checkpoint_dir, exist_ok=True)
             self.trainer.save_model(checkpoint_dir)
             self.tokenizer.save_pretrained(checkpoint_dir)
-            print_gpu_memory()
         except Exception as e:
-            print(f"\n❌ Ошибка: {e}")
-            print_gpu_memory()
             raise
         finally:
             # Очистка памяти
@@ -505,13 +486,10 @@ class DCCircuitRLTrainer:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             gc.collect()
-            print("🧹 Память очищена")
-            print_gpu_memory()
 
     def run(self):
         """Полный цикл обучения."""
         print("🚀 Запуск обучения GRPO")
-        print_gpu_memory()
 
         # Создаем файл для детального логирования
         with open("training_detailed_log.txt", "w", encoding="utf-8") as f:
@@ -522,11 +500,9 @@ class DCCircuitRLTrainer:
 
         self.setup_model()
         print("✅ Модель загружена")
-        print_gpu_memory()
 
         self.setup_trainer()
         print("✅ Тренер настроен")
-        print_gpu_memory()
 
         self.train()
 

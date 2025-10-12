@@ -50,26 +50,18 @@ def create_circuit_prompt(metadata: dict, question_type: str, target_resistor: s
     else:
         question = f"Find the {question_type} for {target_resistor}"
 
-    prompt = f"""You are an expert circuit analysis engineer.
-            Solve electrical circuit problems using physics laws.
+    prompt = f"""CIRCUIT ANALYSIS TASK:
 
-            FUNDAMENTAL LAWS:
-            1. Ohm: V=IR, I=V/R
-            2. KCL: ΣI_in=ΣI_out
-            3. KVL: ΣV=0
-            4. Series: R_total=R₁+R₂+..., I_total=I₁=I₂
-            5. Parallel: 1/R_total=1/R₁+1/R₂+..., V_total=V₁=V₂
-            6. Power: P=I²R=V²/R
+CIRCUIT DESCRIPTION:
+{circuit_desc}
 
-            Circuit: {circuit_desc}
+QUESTION:
+{question}
 
-            Question: {question}
-
-            YOU MUST USE THE FOLLOWING FORMAT:
-            <think>Your step-by-step reasoning</think>
-            <answer>X.XXX</answer>
-
-            PROVIDE ANSWER WITH EXACTLY 3 DECIMAL PLACES, NO UNITS.
-            """
+INSTRUCTIONS:
+- Analyze the circuit step by step
+- Apply appropriate electrical laws
+- Show all calculations clearly
+- Provide your final answer with exactly 3 decimal places"""
 
     return prompt

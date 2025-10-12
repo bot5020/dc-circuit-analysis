@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from base.data import Data
+from base.utils import get_system_prompt
 from dc_circuit.game import DCCircuitGame
 
 
@@ -249,7 +250,7 @@ def create_model_generator(model, tokenizer, max_new_tokens: int = 512):
         """Генерирует ответ на вопрос."""
         # Форматируем промпт
         messages = [
-            {"role": "system", "content": "You are an expert in DC circuit analysis. IMPORTANT: Show ALL your calculations and reasoning steps, but at the very end, provide the FINAL ANSWER in this exact format: 'The answer is: [numerical_value]'. Do not include units in the final answer format, only the number."},
+            {"role": "system", "content": get_system_prompt()},
             {"role": "user", "content": question}
         ]
         
