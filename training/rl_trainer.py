@@ -44,9 +44,9 @@ class TrainingConfig:
     # Обучение
     learning_rate: float = 5e-5  # Увеличено для более агрессивного обучения
     max_steps: int = 200  # Увеличено для качественного RL обучения
-    batch_size: int = 2  # Уменьшено для экономии памяти
-    gradient_accumulation_steps: int = 32  # Уменьшено для стабильности (эфф=32)
-    num_generations: int = 4  # Уменьшено для экономии памяти
+    batch_size: int = 1  # Минимальный batch для стабильности
+    gradient_accumulation_steps: int = 16  # Эффективный batch = 16
+    num_generations: int = 4  # Лучше exploration с 4 генерациями
     save_steps: int = 25 
     
     # Dataset
@@ -222,16 +222,25 @@ class DCCircuitRLTrainer:
             return prompt_content[gold_start + 6:gold_end].strip()
         return ""
     
-    def _log_detailed_metrics(self, step: int, correct_answer: str, 
+    def _log_detailed_metrics(self, step: int, correct_answer: str,
                              raw_response: str, extracted: str):
         """Выводит детальное логирование метрик.
-        
+
         Args:
             step: Номер шага
             correct_answer: Правильный ответ
             raw_response: Сырой ответ модели
             extracted: Извлечённый ответ
         """
+        # Логирование в файл
+        with open("training_detailed_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*80}\n")
+            f.write(f"📊 ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ | Step {step}\n")
+            f.write(f"{'='*80}\n")
+            f.write(f"✅ Правильный ответ: {correct_answer}\n")
+            f.write(f"🤖 Ответ модели (полный):\n{raw_response}\n")
+            f.write(f"🔍 Извлечённый ответ: '{extracted}'\n")
+
         print("\n" + "="*80)
         print(f"📊 ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ | Step {step}")
         print("="*80)
@@ -268,7 +277,7 @@ class DCCircuitRLTrainer:
                     print(f"   Модель (округл.):      {rounded_model}")
                     print(f"   Абс. погрешность:      {abs(rounded_model - rounded_correct):.6f}")
                     print(f"   Отн. погрешность:      {rel_error:.6f} ({rel_error_percent:.2f}%)")
-                    print(f"   Пороги: 0.1%={0.001}, 0.2%={0.002}, 0.3%={0.003}, 0.5%={0.005}")
+                    print(f"   Пороги: 1%={0.01}, 5%={0.05}, 10%={0.10}, 20%={0.20}")
                 except:
                     pass
                 
@@ -277,8 +286,63 @@ class DCCircuitRLTrainer:
                 print(f"\n💰 Reward: 0.0 (ошибка: {e})")
         else:
             print(f"\n💰 Reward: 0.0 (не удалось извлечь ответ)")
-    
-    
+
+    def _log_detailed_metrics_for_generation(self, step: int, generation_num: int, correct_answer: str,
+                                           raw_response: str, extracted: str):
+        """Выводит детальное логирование метрик для каждой генерации.
+
+        Args:
+            step: Номер шага
+            generation_num: Номер генерации (1-4)
+            correct_answer: Правильный ответ
+            raw_response: Сырой ответ модели
+            extracted: Извлечённый ответ
+        """
+        # Логирование в файл
+        with open("training_detailed_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*60}\n")
+            f.write(f"📊 Step {step} | Generation {generation_num}\n")
+            f.write(f"{'='*60}\n")
+            f.write(f"✅ Правильный ответ: {correct_answer}\n")
+            f.write(f"🤖 Ответ модели (полный):\n{raw_response}\n")
+            f.write(f"🔍 Извлечённый ответ: '{extracted}'\n")
+
+            # Вычисляем reward для этой генерации
+            if extracted:
+                data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
+                try:
+                    score = self._verifier.get_accuracy_score(data, raw_response)
+                    reward = score * 2.0
+
+                    # Детальный расчёт погрешности
+                    try:
+                        model_val = float(extracted)
+                        correct_val = float(correct_answer)
+                        rounded_correct = round(correct_val, 3)
+                        rounded_model = round(model_val, 3)
+
+                        if abs(rounded_correct) < 1e-12:
+                            rel_error = abs(rounded_model - rounded_correct)
+                            rel_error_percent = rel_error * 100
+                        else:
+                            rel_error = abs(rounded_model - rounded_correct) / abs(rounded_correct)
+                            rel_error_percent = rel_error * 100
+
+                        f.write(f"🔬 Детальный расчёт:\n")
+                        f.write(f"   Правильно (округл.):   {rounded_correct}\n")
+                        f.write(f"   Модель (округл.):      {rounded_model}\n")
+                        f.write(f"   Отн. погрешность:      {rel_error:.6f} ({rel_error_percent:.2f}%)\n")
+                        f.write(f"💰 Accuracy Score: {score:.2f} → Reward: {reward:.2f}\n")
+                    except:
+                        f.write(f"💰 Accuracy Score: {score:.2f} → Reward: {reward:.2f}\n")
+                except Exception as e:
+                    f.write(f"💰 Reward: 0.0 (ошибка: {e})\n")
+            else:
+                f.write(f"💰 Reward: 0.0 (не удалось извлечь ответ)\n")
+
+        print(f"\n🔄 Generation {generation_num}:")
+        print(f"   Правильный: {correct_answer} | Извлечённый: '{extracted}'")
+
     def _calculate_rewards(self, correct_answer: str, responses: List[str]) -> List[float]:
         """Вычисляет rewards для всех ответов.
         
@@ -328,11 +392,12 @@ class DCCircuitRLTrainer:
         if self._should_log_step(step) and prompts and responses:
             prompt_content = self._extract_prompt_content(prompts)
             correct_answer = self._extract_gold_answer(prompt_content)
-            
+
             if correct_answer:
-                raw_response = responses[0] if responses else ""
-                extracted = extract_answer(raw_response) if responses else ""
-                self._log_detailed_metrics(step, correct_answer, raw_response, extracted)
+                # Логируем все 4 ответа
+                for i, raw_response in enumerate(responses):
+                    extracted = extract_answer(raw_response)
+                    self._log_detailed_metrics_for_generation(step, i+1, correct_answer, raw_response, extracted)
         
         # Извлекаем правильный ответ и вычисляем rewards
         prompt_content = self._extract_prompt_content(prompts)
@@ -352,7 +417,7 @@ class DCCircuitRLTrainer:
         print(f"🎯 Обнаружено GPU: {num_gpus}")
         
         training_args = GRPOConfig(
-            use_vllm=True, 
+            use_vllm=True,  # Включаем vLLM для качества
             learning_rate=self.config.learning_rate,
             adam_beta1=0.9,
             adam_beta2=0.99,
@@ -364,8 +429,8 @@ class DCCircuitRLTrainer:
             per_device_train_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             num_generations=self.config.num_generations,
-            max_prompt_length=4096,  # Ещё уменьшили для памяти!
-            max_completion_length=4096,  # Ещё уменьшили для памяти!
+            max_prompt_length=4096,  # Полная длина для качества
+            max_completion_length=4096,  # Полная длина для качества
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
             max_grad_norm=0.1,
@@ -416,6 +481,13 @@ class DCCircuitRLTrainer:
 
     def run(self):
         """Полный цикл обучения."""
+        # Создаем файл для детального логирования
+        with open("training_detailed_log.txt", "w", encoding="utf-8") as f:
+            f.write("🚀 НАЧАЛО ОБУЧЕНИЯ GRPO\n")
+            f.write(f"Время: {torch.__version__}\n")
+            f.write(f"Конфигурация: batch_size={self.config.batch_size}, num_generations={self.config.num_generations}\n")
+            f.write("="*80 + "\n\n")
+
         self.setup_model()
         self.setup_trainer()
         self.train()
