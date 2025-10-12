@@ -32,7 +32,7 @@ class TrainingConfig:
     """Настройки обучения"""
     
     # Модель - МАТЕМАТИЧЕСКАЯ СПЕЦИАЛИЗАЦИЯ
-    model_name: str = "unsloth/Qwen3-4B-Thinking-2507-GGUF"  
+    model_name: str = "unsloth/Qwen3-4B-Instruct-2507"  
     output_dir: str = "./dc_circuit_model_rl"
     max_seq_length: int = 8192  
     
