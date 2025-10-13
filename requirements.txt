@@ -5,7 +5,8 @@ matplotlib>=3.5.0
 # === ML БИБЛИОТЕКИ ===
 torch>=2.0.0
 transformers>=4.36.0
-vllm 
+vllm
+flash-attn --no-build-isolation 
 
 # === RL ОБУЧЕНИЕ (GRPO) ===
 trl>=0.8.0

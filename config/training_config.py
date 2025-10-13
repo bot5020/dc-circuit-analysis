@@ -9,7 +9,7 @@ class TrainingConfig:
     """Конфигурация для GRPO обучения модели."""
     
     # Модель
-    model_name: str = "Qwen/Qwen3-4B-Instruct-2507"
+    model_name: str = "unsloth/Qwen3-4B-Instruct-2507"  # Используем unsloth версию
     output_dir: str = "./dc_circuit_model_rl"
     
     # Формат модели
@@ -27,8 +27,8 @@ class TrainingConfig:
     learning_rate: float = 1e-5
     max_steps: int = 500
     save_steps: int = 100
-    batch_size: int = 2
-    gradient_accumulation_steps: int = 2
+    batch_size: int = 4 
+    gradient_accumulation_steps: int = 1  
     
     # Оптимизатор
     adam_beta1: float = 0.9
@@ -38,14 +38,14 @@ class TrainingConfig:
     max_grad_norm: float = 0.1
     
     # Генерация
-    max_seq_length: int = 12000
-    max_completion_length: int = 12000
+    max_seq_length: int = 11000
+    max_completion_length: int = 11000
     num_generations: int = 3
     temperature: float = 0.7
     top_p: float = 0.95
     repetition_penalty: float = 1.1
     do_sample: bool = False
-    gpu_memory_utilization: float = 0.23
+    gpu_memory_utilization: float = 0.35
     
     # Dataset
     difficulties: List[int] = None

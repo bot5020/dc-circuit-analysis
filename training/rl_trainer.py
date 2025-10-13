@@ -89,7 +89,8 @@ class DCCircuitRLTrainer:
             dtype=self.config.dtype,
             fast_inference=True,
             gpu_memory_utilization=self.config.gpu_memory_utilization,
-            use_flash_attention=self.config.use_flash_attention
+            use_flash_attention=self.config.use_flash_attention,
+            device_map="auto"  # Автоматическое размещение на GPU
         )
         
         if self.tokenizer.chat_template is None:
