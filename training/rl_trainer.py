@@ -203,10 +203,14 @@ class DCCircuitRLTrainer:
                     reward = -1.0  # Отрицательный reward за неправильный формат
                     accuracy_score = 0.0
                     print(f"❌ Штраф за tool_call: reward = {reward}")
+                    print(f"🔍 Debug: completion type = {type(completion)}")
+                    print(f"🔍 Debug: completion_str[:200] = {completion_str[:200]}")
                 else:
                     # Создаем минимальный Data объект для верификатора
                     data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
-                    accuracy_score = self._verifier.get_accuracy_score(data, completion)
+                    # Преобразуем completion в строку если это список
+                    completion_str_for_verifier = str(completion) if not isinstance(completion, str) else completion
+                    accuracy_score = self._verifier.get_accuracy_score(data, completion_str_for_verifier)
                     reward = accuracy_score * 2.0  # Масштабируем reward [0, 2]
                     print(f"✅ Правильный формат, accuracy: {accuracy_score:.3f}, reward: {reward:.3f}")
             
