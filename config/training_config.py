@@ -12,6 +12,11 @@ class TrainingConfig:
     model_name: str = "Qwen/Qwen3-4B-Instruct-2507"
     output_dir: str = "./dc_circuit_model_rl"
     
+    # Формат модели
+    use_4bit: bool = False  # True для 4-bit, False для BF16
+    dtype: str = "bfloat16"  # "bfloat16" или "float16"
+    use_flash_attention: bool = True  # Flash Attention 2
+    
     # LoRA параметры
     lora_r: int = 64
     lora_alpha: int = 64
@@ -22,8 +27,8 @@ class TrainingConfig:
     learning_rate: float = 1e-5
     max_steps: int = 500
     save_steps: int = 100
-    batch_size: int = 4
-    gradient_accumulation_steps: int = 4
+    batch_size: int = 2
+    gradient_accumulation_steps: int = 2
     
     # Оптимизатор
     adam_beta1: float = 0.9
@@ -33,14 +38,14 @@ class TrainingConfig:
     max_grad_norm: float = 0.1
     
     # Генерация
-    max_seq_length: int = 4096
-    max_completion_length: int = 8196
+    max_seq_length: int = 12000
+    max_completion_length: int = 12000
     num_generations: int = 3
     temperature: float = 0.7
     top_p: float = 0.95
     repetition_penalty: float = 1.1
     do_sample: bool = False
-    gpu_memory_utilization: float = 0.25
+    gpu_memory_utilization: float = 0.23
     
     # Dataset
     difficulties: List[int] = None

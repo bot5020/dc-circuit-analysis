@@ -40,23 +40,23 @@ class DCCircuitDataset(Dataset):
         if self.data is not None:
             return  # Уже сгенерировано
             
-            all_data = []
-            for difficulty in self.config.difficulties:
-                data_list = self.game.generate(
-                    num_of_questions=self.config.samples_per_difficulty,
+        all_data = []
+        for difficulty in self.config.difficulties:
+            data_list = self.game.generate(
+                num_of_questions=self.config.samples_per_difficulty,
                 difficulty=difficulty
-                )
-                
-                all_data.extend([{
-                    "prompt": [
-                    {"role": "system", "content": get_system_prompt()},
-                    {"role": "user", "content": data.question}
-                    ],
-                    "question": data.question,
-                    "answer": f"{float(data.answer):.3f}",
-                    "difficulty": data.difficulty
-                } for data in data_list])
+            )
             
+            all_data.extend([{
+                "prompt": [
+                {"role": "system", "content": get_system_prompt()},
+                {"role": "user", "content": data.question}
+                ],
+                "question": data.question,
+                "answer": f"{float(data.answer):.3f}",
+                "difficulty": data.difficulty
+            } for data in data_list])
+        
         self.data = all_data
 
     def __len__(self) -> int:
@@ -85,10 +85,11 @@ class DCCircuitRLTrainer:
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
-            load_in_4bit=True,  
-            dtype=None,
+            load_in_4bit=self.config.use_4bit,  
+            dtype=self.config.dtype,
             fast_inference=True,
-            gpu_memory_utilization=self.config.gpu_memory_utilization  
+            gpu_memory_utilization=self.config.gpu_memory_utilization,
+            use_flash_attention=self.config.use_flash_attention
         )
         
         if self.tokenizer.chat_template is None:
