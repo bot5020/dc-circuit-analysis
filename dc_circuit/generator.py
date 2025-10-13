@@ -16,10 +16,10 @@ class CircuitGenerator:
     def _build_difficulty_configs(self) -> Dict[int, Dict]:
         """Упрощенные конфигурации сложности (2 уровня)."""
         configs = {}
-        # Уровень 1: Последовательные цепи (2-3 резистора)
-        configs[1] = {"min_resistors": 2, "max_resistors": 3, "topology": "series"}
-        # Уровень 2: Параллельные цепи (2-3 резистора)
-        configs[2] = {"min_resistors": 2, "max_resistors": 3, "topology": "parallel"}
+        # Уровень 1: Последовательные цепи (2 резистора)
+        configs[1] = {"min_resistors": 2, "max_resistors": 2, "topology": "series"}
+        # Уровень 2: Параллельные цепи (2 резистора)
+        configs[2] = {"min_resistors": 2, "max_resistors": 2, "topology": "parallel"}
         return configs
     
     def generate_circuit(self, difficulty: int = 1, seed: Optional[int] = None, **kwargs) -> Tuple[Circuit, str, Dict]:
@@ -52,8 +52,8 @@ class CircuitGenerator:
         circuit.set_ground("C")
         
         resistors = {}
-        # Простые сопротивления
-        for i in range(num_resistors):
+        # Простые сопротивления - только для 2 резисторов максимум
+        for i in range(min(num_resistors, 2)):
             resistance = random.randint(10, 100)  # Простые значения
             resistor_name = f"R{i+1}"
             if i == 0:
@@ -63,8 +63,8 @@ class CircuitGenerator:
                 circuit.add_resistor("B", "C", resistance)
                 resistors[resistor_name] = ("B", "C", resistance)
         
-        # Только базовые типы вопросов
-        question_types = ["current", "voltage"]
+        # Для последовательных цепей только напряжение (ток одинаков везде)
+        question_types = ["voltage"]
         question_type = random.choice(question_types)
         target_resistor = random.choice(list(resistors.keys()))
         
@@ -96,8 +96,8 @@ class CircuitGenerator:
             circuit.add_resistor("A", "B", resistance)
             resistors[resistor_name] = ("A", "B", resistance)
         
-        # Только базовые типы вопросов
-        question_types = ["current", "voltage"]
+        # Для параллельных цепей только ток (напряжение одинаково на всех резисторах)
+        question_types = ["current"]
         question_type = random.choice(question_types)
         target_resistor = random.choice(list(resistors.keys()))
         
