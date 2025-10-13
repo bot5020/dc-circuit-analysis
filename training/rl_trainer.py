@@ -183,9 +183,12 @@ class DCCircuitRLTrainer:
                         print(f"✅ Найден ответ по содержимому: {correct_answer}")
                         break
             
+            # Инициализируем переменные
+            accuracy_score = None
+            reward = 0.0
+            
             if correct_answer is None:
                 # Если не нашли, используем случайный reward
-                reward = 0.0
                 print(f"❌ Не найден правильный ответ для индекса {idx}")
             else:
                 # Проверяем формат ответа
