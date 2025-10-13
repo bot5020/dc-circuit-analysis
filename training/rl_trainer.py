@@ -4,6 +4,8 @@
 import os
 import sys
 import torch
+import json
+import datetime
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -79,6 +81,11 @@ class DCCircuitRLTrainer:
         self.trainer = None
         self._verifier = None
         self.dataset = None  # Сохраняем dataset для reward функции
+        
+        # Создаем файл для логирования LLM
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.llm_log_file = f"llm_logs_{timestamp}.jsonl"
+        self.log_entries = []
 
     def setup_model(self):
         """Загружает модель с LoRA"""        
@@ -112,7 +119,25 @@ class DCCircuitRLTrainer:
         self.model.train()
         self.model.print_trainable_parameters()
 
+    def log_llm_interaction(self, prompt, completion, reward=None, metadata=None):
+        """Логирует взаимодействие с LLM"""
+        entry = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "prompt": prompt,
+            "completion": completion,
+            "reward": reward,
+            "metadata": metadata or {}
+        }
+        self.log_entries.append(entry)
+        
+        # Записываем в файл
+        with open(self.llm_log_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 
+    def save_llm_logs(self):
+        """Сохраняет все логи LLM"""
+        with open(f"llm_logs_complete_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json", 'w', encoding='utf-8') as f:
+            json.dump(self.log_entries, f, ensure_ascii=False, indent=2)
     
     def reward_function(self, prompts, completions, **kwargs) -> List[float]:
         """Reward на основе verifier.
@@ -146,6 +171,18 @@ class DCCircuitRLTrainer:
                 data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
                 accuracy_score = self._verifier.get_accuracy_score(data, completion)
                 reward = accuracy_score * 2.0  # Масштабируем reward [0, 2]
+            
+            # Логируем взаимодействие с LLM
+            self.log_llm_interaction(
+                prompt=prompt_text,
+                completion=completion,
+                reward=reward,
+                metadata={
+                    "correct_answer": correct_answer,
+                    "accuracy_score": accuracy_score if correct_answer else None,
+                    "batch_idx": idx
+                }
+            )
             
             rewards.append(reward)
 
@@ -201,12 +238,23 @@ class DCCircuitRLTrainer:
             self.trainer.save_model(self.config.output_dir)
             self.tokenizer.save_pretrained(self.config.output_dir)
             
+            # Сохраняем логи LLM
+            self.save_llm_logs()
+            print(f"✅ Логи LLM сохранены в {self.llm_log_file}")
+            
         except KeyboardInterrupt:
             checkpoint_dir = f"{self.config.output_dir}/checkpoint"
             os.makedirs(checkpoint_dir, exist_ok=True)
             self.trainer.save_model(checkpoint_dir)
             self.tokenizer.save_pretrained(checkpoint_dir)
+            
+            # Сохраняем логи при прерывании
+            self.save_llm_logs()
+            print(f"✅ Логи LLM сохранены в {self.llm_log_file}")
         except Exception as e:
+            # Сохраняем логи при ошибке
+            self.save_llm_logs()
+            print(f"✅ Логи LLM сохранены в {self.llm_log_file}")
             raise
 
     def run(self):
