@@ -1,12 +1,11 @@
-# === ОСНОВНЫЕ ЗАВИСИМОСТИ ===
 numpy>=1.21.0
 matplotlib>=3.5.0
 
 # === ML БИБЛИОТЕКИ ===
-torch>=2.5.0
+torch>=2.0.0
 transformers>=4.36.0
 vllm
-xformers>=0.0.29
+flash-attn 
 
 # === RL ОБУЧЕНИЕ (GRPO) ===
 trl>=0.8.0
