@@ -78,22 +78,114 @@ class CircuitSolver:
         # Ток в последовательной цепи
         current = voltage / total_resistance
         
+        # Строим правильную последовательность резисторов от источника к земле
+        ordered_resistors = self._order_series_resistors(circuit.resistors, pos_node, neg_node)
+        
+        if not ordered_resistors:
+            # Не удалось построить последовательность, используем упрощенный подход
+            return {pos_node: voltage, neg_node: 0.0}
+        
         # Вычисляем напряжения на узлах
         result = {neg_node: 0.0}  # Заземленный узел
         
-        # Проходим по резисторам и вычисляем напряжения
-        remaining_voltage = voltage
-        for r in circuit.resistors:
-            n1, n2, R = r
-            voltage_drop = current * R
-            remaining_voltage -= voltage_drop
+        # Проходим по резисторам в правильном порядке от заземленного узла к источнику
+        current_voltage = 0.0
+        current_node = neg_node
+        
+        # Идем в обратном порядке (от земли к источнику)
+        for n1, n2, R in reversed(ordered_resistors):
+            # Определяем, в каком направлении идет резистор
+            if n1 == current_node:
+                next_node = n2
+            elif n2 == current_node:
+                next_node = n1
+            else:
+                # Резистор не соединен с текущим узлом, пропускаем
+                continue
             
-            if n1 not in result:
-                result[n1] = remaining_voltage + voltage_drop
-            if n2 not in result:
-                result[n2] = remaining_voltage
+            # Напряжение увеличивается по направлению к источнику
+            current_voltage += current * R
+            result[next_node] = current_voltage
+            current_node = next_node
         
         return result
+    
+    def _order_series_resistors(self, resistors, start_node, end_node):
+        """
+        Строит правильную последовательность резисторов от start_node к end_node
+        
+        Args:
+            resistors: Список резисторов [(n1, n2, R), ...]
+            start_node: Начальный узел (источник +)
+            end_node: Конечный узел (земля)
+        
+        Returns:
+            Список резисторов в правильном порядке
+        """
+        if not resistors:
+            return []
+        
+        # Создаем граф соединений
+        graph = {}
+        resistor_map = {}
+        
+        for n1, n2, R in resistors:
+            if n1 not in graph:
+                graph[n1] = []
+            if n2 not in graph:
+                graph[n2] = []
+            
+            graph[n1].append(n2)
+            graph[n2].append(n1)
+            resistor_map[(n1, n2)] = (n1, n2, R)
+            resistor_map[(n2, n1)] = (n1, n2, R)
+        
+        # Ищем путь от start_node к end_node
+        path = self._find_path(graph, start_node, end_node)
+        
+        if not path or len(path) < 2:
+            return resistors  # Fallback к исходному порядку
+        
+        # Строим список резисторов по найденному пути
+        ordered = []
+        for i in range(len(path) - 1):
+            n1, n2 = path[i], path[i + 1]
+            if (n1, n2) in resistor_map:
+                ordered.append(resistor_map[(n1, n2)])
+        
+        return ordered
+    
+    def _find_path(self, graph, start, end, path=None):
+        """
+        Ищет путь от start до end в графе (DFS)
+        
+        Args:
+            graph: Словарь {node: [connected_nodes]}
+            start: Начальный узел
+            end: Конечный узел
+            path: Текущий путь (для рекурсии)
+        
+        Returns:
+            Список узлов от start до end или None
+        """
+        if path is None:
+            path = []
+        
+        path = path + [start]
+        
+        if start == end:
+            return path
+        
+        if start not in graph:
+            return None
+        
+        for node in graph[start]:
+            if node not in path:  # Избегаем циклов
+                new_path = self._find_path(graph, node, end, path)
+                if new_path:
+                    return new_path
+        
+        return None
     
     def _solve_parallel(self, circuit: Circuit, pos_node: str, neg_node: str, voltage: float) -> Dict[str, float]:
         """Решает параллельную цепь"""
@@ -105,14 +197,28 @@ class CircuitSolver:
     
     def get_current(self, circuit: Circuit, node_voltages: Dict[str, float], 
                    node1: str, node2: str) -> float:
-        """Вычисление тока через резистор между узлами"""
+        """Вычисление тока через резистор между узлами.
+        
+        Возвращает абсолютное значение тока (величину), игнорируя направление.
+        Для последовательных и параллельных цепей этого достаточно.
+        
+        Args:
+            circuit: Цепь
+            node_voltages: Узловые потенциалы
+            node1: Первый узел
+            node2: Второй узел
+            
+        Returns:
+            Абсолютное значение тока в амперах
+        """
         for (n1, n2, R) in circuit.resistors:
             if (n1 == node1 and n2 == node2) or (n1 == node2 and n2 == node1):
                 if R == 0:
                     continue
-                V1 = node_voltages.get(n1, 0.0)
-                V2 = node_voltages.get(n2, 0.0)
-                current = (V1 - V2) / R
+                # Вычисляем ток в запрошенном направлении (от node1 к node2)
+                V_node1 = node_voltages.get(node1, 0.0)
+                V_node2 = node_voltages.get(node2, 0.0)
+                current = (V_node1 - V_node2) / R
                 return abs(current)
         
         return 0.0
