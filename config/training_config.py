@@ -24,10 +24,10 @@ class TrainingConfig:
     lora_target_modules: List[str] = None
     
     # Обучение
-    learning_rate: float = 1e-5
-    max_steps: int = 500
-    save_steps: int = 100
-    batch_size: int = 4 
+    learning_rate: float = 2e-5  #
+    max_steps: int = 200 
+    save_steps: int = 50 
+    batch_size: int = 8 
     gradient_accumulation_steps: int = 1  
     
     # Оптимизатор
@@ -40,7 +40,7 @@ class TrainingConfig:
     # Генерация
     max_seq_length: int = 11000
     max_completion_length: int = 11000
-    num_generations: int = 3
+    num_generations: int = 4
     temperature: float = 0.7
     top_p: float = 0.95
     repetition_penalty: float = 1.1
@@ -53,7 +53,7 @@ class TrainingConfig:
 
     def __post_init__(self):
         if self.difficulties is None:
-            self.difficulties = [1, 2, 3]  # 3 уровня: series, parallel, mixed
+            self.difficulties = [1, 2]  # 2 уровня: series, parallel
         
         if self.lora_target_modules is None:
             self.lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
