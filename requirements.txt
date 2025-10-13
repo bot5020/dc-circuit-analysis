@@ -6,7 +6,7 @@ matplotlib>=3.5.0
 torch>=2.0.0
 transformers>=4.36.0
 vllm
-flash-attn=2.8.2
+flash-attn==2.8.2
 xformers==0.0.22.post7
 
 # === RL ОБУЧЕНИЕ (GRPO) ===
