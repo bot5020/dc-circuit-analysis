@@ -173,18 +173,35 @@ class DCCircuitRLTrainer:
             # Ищем соответствующий элемент в dataset по промпту
             prompt_text = prompts[idx] if isinstance(prompts[idx], str) else str(prompts[idx])
             
-            # Ищем в dataset по вопросу из промпта
+            # Извлекаем вопрос из промпта (последнее сообщение user)
             correct_answer = None
+            question_from_prompt = None
             
-            if idx < len(self.dataset):
-                correct_answer = self.dataset[idx]["answer"]
-                print(f"✅ Найден ответ по индексу {idx}: {correct_answer}")
-            else:
-                for data_item in self.dataset:
-                    if data_item["question"] in prompt_text:
-                        correct_answer = data_item["answer"]
-                        print(f"✅ Найден ответ по содержимому: {correct_answer}")
+            # Если промпт - это список сообщений
+            if isinstance(prompts[idx], list):
+                for msg in reversed(prompts[idx]):
+                    if isinstance(msg, dict) and msg.get('role') == 'user':
+                        question_from_prompt = msg.get('content', '')
                         break
+            else:
+                # Если промпт - строка, используем её целиком
+                question_from_prompt = prompt_text
+            
+            # Ищем соответствующую задачу в датасете ПО СОДЕРЖИМОМУ
+            if question_from_prompt:
+                for data_item in self.dataset:
+                    if data_item["question"] == question_from_prompt:
+                        correct_answer = data_item["answer"]
+                        print(f"✅ Найден ответ по точному совпадению вопроса: {correct_answer}")
+                        break
+                
+                # Если не нашли точного совпадения, ищем частичное
+                if correct_answer is None:
+                    for data_item in self.dataset:
+                        if data_item["question"] in question_from_prompt or question_from_prompt in data_item["question"]:
+                            correct_answer = data_item["answer"]
+                            print(f"✅ Найден ответ по частичному совпадению: {correct_answer}")
+                            break
             
             accuracy_score = None
             reward = 0.0
