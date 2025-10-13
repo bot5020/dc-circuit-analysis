@@ -12,7 +12,9 @@ from base.utils import extract_answer
 from dc_circuit.generator import CircuitGenerator
 from dc_circuit.solver import CircuitSolver, Circuit
 from dc_circuit.verifier import DCCircuitVerifier
+from config import VerifierConfig
 from dc_circuit.prompt import create_circuit_prompt
+from config import CircuitConfig
 
 
 class DCCircuitGame(Game):
@@ -30,12 +32,14 @@ class DCCircuitGame(Game):
         answer_precision: Количество знаков после запятой в ответах
     """
     
-    def __init__(self) -> None:
-        """Инициализирует игру DC Circuit Analysis."""
-        super().__init__("DC Circuit Analysis", DCCircuitVerifier)
-        self.generator: CircuitGenerator = CircuitGenerator()
+    def __init__(self, config: CircuitConfig = None, verifier_config: VerifierConfig = None) -> None:
+        verifier_config = verifier_config or VerifierConfig()
+        super().__init__("DC Circuit Analysis", lambda: DCCircuitVerifier(verifier_config))
+        self.config = config or CircuitConfig()
+        self.verifier_config = verifier_config
+        self.generator: CircuitGenerator = CircuitGenerator(self.config)
         self.solver: CircuitSolver = CircuitSolver()
-        self.answer_precision: int = 3
+        self.answer_precision: int = verifier_config.answer_precision
     
     def generate(
         self, 
@@ -147,14 +151,11 @@ class DCCircuitGame(Game):
         calculator = self._calculators.get(question_type)
         if calculator:
             return calculator.calculate(circuit, node_voltages, metadata, target_resistor)
-        else: 
-            raise ValueError(f"Unknown question type: {question_type}")
     
     def extract_answer(self, test_solution: str) -> str:
         """Извлекает ответ из решения агента.
         
-        Использует унифицированную функцию из base.utils для консистентности
-        извлечения ответов во всем проекте.
+        Делегирует извлечение унифицированной функции из base.utils.
         
         Args:
             test_solution: Полное решение агента (может содержать теги, рассуждения)
@@ -163,3 +164,5 @@ class DCCircuitGame(Game):
             Извлеченный ответ как строка
         """
         return extract_answer(test_solution)
+
+    

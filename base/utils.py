@@ -76,8 +76,7 @@ def get_system_prompt() -> str:
         "• Kirchhoff's Current Law (KCL): ΣI_in = ΣI_out\n"
         "• Kirchhoff's Voltage Law (KVL): ΣV = 0\n"
         "• Series: R_total = R₁ + R₂ + ..., I_total = I₁ = I₂\n"
-        "• Parallel: 1/R_total = 1/R₁ + 1/R₂ + ..., V_total = V₁ = V₂\n"
-        "• Power: P = I²R = V²/R = VI\n\n"
+        "• Parallel: 1/R_total = 1/R₁ + 1/R₂ + ..., V_total = V₁ = V₂\n\n"
         
         "APPROACH:\n"
         "1. Identify circuit topology (series, parallel, mixed)\n"
@@ -85,6 +84,11 @@ def get_system_prompt() -> str:
         "3. Calculate equivalent resistance if needed\n"
         "4. Solve for the requested quantity step by step\n"
         "5. Verify your answer makes physical sense\n\n"
+        
+        "CIRCUIT TYPES:\n"
+        "• Series: Current same, voltages add up\n"
+        "• Parallel: Voltage same, currents add up\n"
+        "• Mixed: Combination of series and parallel\n\n"
         
         "RESPONSE FORMAT:\n"
         "Always respond in this exact format:\n"
@@ -120,5 +124,3 @@ def get_system_prompt() -> str:
         "- Be precise and methodical\n"
         "- Check your work for reasonableness"
     )
-
-

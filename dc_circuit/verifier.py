@@ -9,19 +9,7 @@ from typing import Optional
 from base.verifier import Verifier
 from base.data import Data
 from base.utils import extract_answer
-
-
-# Константы для верификации
-RELATIVE_TOLERANCE = 1e-3  # 0.1% относительная погрешность для LLM
-ABSOLUTE_TOLERANCE = 1e-6  # 1мк абсолютная погрешность
-ANSWER_PRECISION = 3       # Количество знаков после запятой
-
-# Константы для градиентной оценки (accuracy_score) - УМЕНЬШЕНЫ ДЛЯ МЕНЬШЕЙ СТРОГОСТИ
-THRESHOLD_PERFECT = 0.01   # 1% - максимальная оценка 1.0 (было 0.1%)
-THRESHOLD_GOOD = 0.05      # 5% - оценка 0.75 (было 0.2%)
-THRESHOLD_OK = 0.10        # 10% - оценка 0.5 (было 0.3%)
-THRESHOLD_FAIR = 0.20      # 20% - оценка 0.25 (было 0.5%)
-MIN_DIVISOR = 1e-12        # Минимальный делитель для избежания деления на ноль
+from config import VerifierConfig
 
 
 class DCCircuitVerifier(Verifier):
@@ -36,12 +24,12 @@ class DCCircuitVerifier(Verifier):
         precision: Количество знаков после запятой в ответах
     """
     
-    def __init__(self) -> None:
-        """Инициализирует верификатор с настройками погрешности."""
+    def __init__(self, config: VerifierConfig = None) -> None:
         super().__init__()
-        self.rtol: float = RELATIVE_TOLERANCE
-        self.atol: float = ABSOLUTE_TOLERANCE
-        self.precision: int = ANSWER_PRECISION
+        self.config = config or VerifierConfig()
+        self.rtol: float = self.config.relative_tolerance
+        self.atol: float = self.config.absolute_tolerance
+        self.precision: int = self.config.answer_precision
     
     def verify(self, data: Data, test_answer: str) -> bool:
         """Проверяет правильность ответа агента.
@@ -113,19 +101,19 @@ class DCCircuitVerifier(Verifier):
             rounded_agent = round(agent_value, self.precision)
 
             # Вычисление относительной погрешности
-            if abs(rounded_correct) < 1e-12:  # Избегаем деления на ноль
+            if abs(rounded_correct) < self.config.min_divisor:  # Избегаем деления на ноль
                 relative_error = abs(rounded_agent - rounded_correct)
             else:
                 relative_error = abs(rounded_agent - rounded_correct) / abs(rounded_correct)
 
             # Градиентная оценка точности
-            if relative_error <= THRESHOLD_PERFECT:
+            if relative_error <= self.config.threshold_perfect:
                 return 1.0
-            elif relative_error <= THRESHOLD_GOOD:
+            elif relative_error <= self.config.threshold_good:
                 return 0.75
-            elif relative_error <= THRESHOLD_OK:
+            elif relative_error <= self.config.threshold_ok:
                 return 0.5
-            elif relative_error <= THRESHOLD_FAIR:
+            elif relative_error <= self.config.threshold_fair:
                 return 0.25
             else:
                 return 0.0
@@ -136,7 +124,7 @@ class DCCircuitVerifier(Verifier):
     def extract_answer(self, test_solution: str) -> Optional[str]:
         """Извлекает численный ответ из решения агента.
         
-        Делегирует извлечение унифицированной функции из base.utils.
+        Использует функцию из base.utils.
         
         Args:
             test_solution: Текст решения (может содержать теги, рассуждения)

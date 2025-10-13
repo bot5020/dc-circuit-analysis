@@ -3,16 +3,23 @@ from typing import Dict
 
 
 class Circuit:
-    """Представляет электрическую цепь"""
+    """Представляет электрическую цепь
+    
+    ИСПРАВЛЕНО: Теперь поддерживает множественные резисторы между одними узлами
+    через список вместо словаря.
+    """
     def __init__(self):
         self.nodes = {}  # node_id -> voltage
-        self.resistors = {}  # (node1, node2) -> resistance
+        self.resistors = []  # Список кортежей: [(node1, node2, resistance), ...]
         self.voltage_sources = {}  # (node_pos, node_neg) -> voltage
         self.ground_node = None
         
     def add_resistor(self, node1: str, node2: str, resistance: float):
-        """Добавляет резистор между узлами"""
-        self.resistors[(node1, node2)] = resistance
+        """Добавляет резистор между узлами
+        
+        ИСПРАВЛЕНО: Теперь добавляет в список, а не перезаписывает в словаре.
+        """
+        self.resistors.append((node1, node2, resistance))
         
     def add_voltage_source(self, node_pos: str, node_neg: str, voltage: float):
         """Добавляет источник напряжения"""
@@ -38,7 +45,8 @@ class CircuitSolver:
         """
         # Получение всех узлов кроме земли
         all_nodes = set()
-        for (n1, n2) in circuit.resistors.keys():
+        # ИСПРАВЛЕНО: resistors теперь список, не словарь
+        for (n1, n2, _) in circuit.resistors:
             all_nodes.update([n1, n2])
         for (node_pos, node_neg) in circuit.voltage_sources.keys():
             all_nodes.update([node_pos, node_neg])
@@ -58,7 +66,11 @@ class CircuitSolver:
         I = np.zeros(n)
         
         # Заполнение матрицы проводимостей
-        for (n1, n2), R in circuit.resistors.items():
+        # ИСПРАВЛЕНО: resistors теперь список кортежей
+        for (n1, n2, R) in circuit.resistors:
+            if R == 0:
+                continue  # Пропускаем нулевые сопротивления
+                
             G_val = 1.0 / R
             
             if n1 in nodes and n2 in nodes:
@@ -102,10 +114,20 @@ class CircuitSolver:
     
     def get_current(self, circuit: Circuit, node_voltages: Dict[str, float], 
                    node1: str, node2: str) -> float:
-        """Вычисление тока через резистор между узлами"""
-        if (node1, node2) not in circuit.resistors:
-            return 0.0
-        R = circuit.resistors[(node1, node2)]
-        V1 = node_voltages.get(node1, 0.0)
-        V2 = node_voltages.get(node2, 0.0)
-        return (V1 - V2) / R
+        """Вычисление тока через резистор между узлами
+        
+        ИСПРАВЛЕНО: Теперь работает со списком резисторов.
+        Если между узлами несколько резисторов, возвращает суммарный ток.
+        """
+        total_current = 0.0
+        
+        for (n1, n2, R) in circuit.resistors:
+            if (n1 == node1 and n2 == node2) or (n1 == node2 and n2 == node1):
+                if R == 0:
+                    continue
+                V1 = node_voltages.get(n1, 0.0)
+                V2 = node_voltages.get(n2, 0.0)
+                current = (V1 - V2) / R
+                total_current += abs(current)
+        
+        return total_current

@@ -25,28 +25,16 @@ def create_circuit_prompt(metadata: dict, question_type: str, target_resistor: s
         circuit_desc = f"Series circuit with voltage source V={voltage}V and resistors: {resistor_list}"
     elif circuit_type == "parallel":
         circuit_desc = f"Parallel circuit with voltage source V={voltage}V and resistors: {resistor_list}"
-    elif circuit_type == "mixed":
-        circuit_desc = f"Mixed (series-parallel) circuit with voltage source V={voltage}V and resistors: {resistor_list}"
     else:
-        circuit_desc = f"Complex circuit with voltage source V={voltage}V and resistors: {resistor_list}"
+        circuit_desc = f"Mixed (series-parallel) circuit with voltage source V={voltage}V and resistors: {resistor_list}"
 
     # Формулирование вопроса
     if question_type == "current":
         question = f"Find the current through {target_resistor} (in Amperes)"
     elif question_type == "voltage":
         question = f"Find the voltage across {target_resistor} (in Volts)"
-    elif question_type == "power":
-        question = f"Find the power dissipated by {target_resistor} (in Watts)"
-    elif question_type == "total_current":
-        question = "Find the total current from the voltage source (in Amperes)"
     elif question_type == "equivalent_resistance":
         question = "Find the equivalent resistance of the circuit (in Ohms)"
-    elif question_type == "voltage_divider":
-        question = f"Find the voltage across {target_resistor} using voltage divider rule (in Volts)"
-    elif question_type == "current_divider":
-        question = f"Find the current through {target_resistor} using current divider rule (in Amperes)"
-    elif question_type == "power_total":
-        question = "Find the total power dissipated by all resistors (in Watts)"
     else:
         question = f"Find the {question_type} for {target_resistor}"
 
