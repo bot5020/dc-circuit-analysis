@@ -9,7 +9,7 @@ class TrainingConfig:
     """Конфигурация для GRPO обучения модели."""
     
     # Модель
-    model_name: str = "unsloth/Qwen2.5-3B-Instruct"  # Используем unsloth версию
+    model_name: str = "unsloth/Qwen2.5-1.5B"
     output_dir: str = "./dc_circuit_model_rl"
     
     # Формат модели
@@ -27,7 +27,7 @@ class TrainingConfig:
     learning_rate: float = 2e-5
     max_steps: int = 200 
     save_steps: int = 50 
-    batch_size: int = 16 
+    batch_size: int = 32 
     gradient_accumulation_steps: int = 1  
     
     # Оптимизатор
@@ -38,8 +38,8 @@ class TrainingConfig:
     max_grad_norm: float = 0.1
     
     # Генерация
-    max_seq_length: int = 11000
-    max_completion_length: int = 11000
+    max_seq_length: int = 8192
+    max_completion_length: int = 8192
     num_generations: int = 8
     temperature: float = 0.7
     top_p: float = 0.95
@@ -49,7 +49,7 @@ class TrainingConfig:
     
     # Dataset
     difficulties: List[int] = None
-    samples_per_difficulty: int = 100
+    samples_per_difficulty: int = 200
 
     def __post_init__(self):
         if self.difficulties is None:
