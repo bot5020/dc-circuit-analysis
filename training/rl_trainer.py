@@ -101,7 +101,19 @@ class DCCircuitRLTrainer:
         )
         
         if self.tokenizer.chat_template is None:
-            self.tokenizer.chat_template = "{% for message in messages %}{% if message['role'] == 'user' %}{{ message['content'] }}{% endif %}{% endfor %}"
+            # Правильный chat template для Qwen3
+            self.tokenizer.chat_template = """{% for message in messages %}
+{% if message['role'] == 'system' %}
+<|im_start|>system
+{{ message['content'] }}<|im_end|>
+{% elif message['role'] == 'user' %}
+<|im_start|>user
+{{ message['content'] }}<|im_end|>
+{% elif message['role'] == 'assistant' %}
+<|im_start|>assistant
+{{ message['content'] }}<|im_end|>
+{% endif %}
+{% endfor %}"""
         
         # LoRA обучение
         self.model = FastLanguageModel.get_peft_model(
@@ -158,19 +170,39 @@ class DCCircuitRLTrainer:
             
             # Ищем в dataset по вопросу из промпта
             correct_answer = None
-            for data_item in self.dataset:
-                if data_item["question"] in prompt_text:
-                    correct_answer = data_item["answer"]
-                    break
+            
+            # Простой поиск по индексу (если промпты идут в том же порядке)
+            if idx < len(self.dataset):
+                correct_answer = self.dataset[idx]["answer"]
+                print(f"✅ Найден ответ по индексу {idx}: {correct_answer}")
+            else:
+                # Альтернативный поиск по содержимому
+                for data_item in self.dataset:
+                    if data_item["question"] in prompt_text:
+                        correct_answer = data_item["answer"]
+                        print(f"✅ Найден ответ по содержимому: {correct_answer}")
+                        break
             
             if correct_answer is None:
                 # Если не нашли, используем случайный reward
                 reward = 0.0
+                print(f"❌ Не найден правильный ответ для индекса {idx}")
             else:
-                # Создаем минимальный Data объект для верификатора
-                data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
-                accuracy_score = self._verifier.get_accuracy_score(data, completion)
-                reward = accuracy_score * 2.0  # Масштабируем reward [0, 2]
+                # Проверяем формат ответа
+                completion_str = str(completion)
+                has_correct_format = "<think>" in completion_str and "<answer>" in completion_str
+                has_tool_call = "<tool_call>" in completion_str
+                
+                if has_tool_call and not has_correct_format:
+                    print(f"⚠️  Неправильный формат ответа (tool_call) для индекса {idx}")
+                    # Штрафуем за неправильный формат
+                    reward = 0.0
+                else:
+                    # Создаем минимальный Data объект для верификатора
+                    data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
+                    accuracy_score = self._verifier.get_accuracy_score(data, completion)
+                    reward = accuracy_score * 2.0  # Масштабируем reward [0, 2]
+                    print(f"✅ Правильный формат, accuracy: {accuracy_score:.3f}, reward: {reward:.3f}")
             
             # Логируем взаимодействие с LLM
             self.log_llm_interaction(
@@ -180,7 +212,10 @@ class DCCircuitRLTrainer:
                 metadata={
                     "correct_answer": correct_answer,
                     "accuracy_score": accuracy_score if correct_answer else None,
-                    "batch_idx": idx
+                    "batch_idx": idx,
+                    "completion_has_tool_call": "<tool_call>" in str(completion),
+                    "completion_has_think": "<think>" in str(completion),
+                    "completion_has_answer": "<answer>" in str(completion)
                 }
             )
             
