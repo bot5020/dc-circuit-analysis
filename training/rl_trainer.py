@@ -116,21 +116,11 @@ class DCCircuitRLTrainer:
     
     def reward_function(self, prompts, completions, **kwargs) -> List[float]:
         """Reward на основе verifier.
-
-        ИСПРАВЛЕНО: Получаем правильные ответы из dataset напрямую,
-        а не из промпта (где их больше нет).
         
-        GRPO передает batch_indices в kwargs, используем их для получения
-        правильных ответов из сохраненного dataset.
+        Используем промпты для поиска правильных ответов в dataset.
         """
         if self._verifier is None:
             self._verifier = DCCircuitVerifier(self.verifier_config)
-        
-        # Получаем индексы текущего батча из kwargs
-        batch_indices = kwargs.get('batch_indices')
-        
-        if not batch_indices:
-            raise ValueError("batch_indices not provided by GRPO trainer")
         
         if self.dataset is None:
             raise ValueError("dataset not initialized")
@@ -138,14 +128,25 @@ class DCCircuitRLTrainer:
         # Вычисляем rewards для каждого completion
         rewards = []
         for idx, completion in enumerate(completions):
-            # Получаем правильный ответ из dataset по индексу
-            data_idx = batch_indices[idx]
-            correct_answer = self.dataset[data_idx]["answer"]
+            # Ищем соответствующий элемент в dataset по промпту
+            prompt_text = prompts[idx] if isinstance(prompts[idx], str) else str(prompts[idx])
             
-            # Создаем минимальный Data объект для верификатора
-            data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
-            accuracy_score = self._verifier.get_accuracy_score(data, completion)
-            reward = accuracy_score * 2.0  # Масштабируем reward [0, 2]
+            # Ищем в dataset по вопросу из промпта
+            correct_answer = None
+            for data_item in self.dataset:
+                if data_item["question"] in prompt_text:
+                    correct_answer = data_item["answer"]
+                    break
+            
+            if correct_answer is None:
+                # Если не нашли, используем случайный reward
+                reward = 0.0
+            else:
+                # Создаем минимальный Data объект для верификатора
+                data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
+                accuracy_score = self._verifier.get_accuracy_score(data, completion)
+                reward = accuracy_score * 2.0  # Масштабируем reward [0, 2]
+            
             rewards.append(reward)
 
         return rewards
