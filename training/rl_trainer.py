@@ -40,23 +40,23 @@ class DCCircuitDataset(Dataset):
         if self.data is not None:
             return  # Уже сгенерировано
             
-        all_data = []
-        for difficulty in self.config.difficulties:
-            data_list = self.game.generate(
-                num_of_questions=self.config.samples_per_difficulty,
+            all_data = []
+            for difficulty in self.config.difficulties:
+                data_list = self.game.generate(
+                    num_of_questions=self.config.samples_per_difficulty,
                 difficulty=difficulty
-            )
-            
-            all_data.extend([{
-                "prompt": [
+                )
+                
+                all_data.extend([{
+                    "prompt": [
                     {"role": "system", "content": get_system_prompt()},
                     {"role": "user", "content": data.question}
-                ],
-                "question": data.question,
-                "answer": f"{float(data.answer):.3f}",
-                "difficulty": data.difficulty
-            } for data in data_list])
-        
+                    ],
+                    "question": data.question,
+                    "answer": f"{float(data.answer):.3f}",
+                    "difficulty": data.difficulty
+                } for data in data_list])
+            
         self.data = all_data
 
     def __len__(self) -> int:
@@ -90,7 +90,7 @@ class DCCircuitRLTrainer:
             fast_inference=True,
             gpu_memory_utilization=self.config.gpu_memory_utilization  
         )
-    
+        
         if self.tokenizer.chat_template is None:
             self.tokenizer.chat_template = "{% for message in messages %}{% if message['role'] == 'user' %}{{ message['content'] }}{% endif %}{% endfor %}"
         
@@ -114,7 +114,7 @@ class DCCircuitRLTrainer:
     
     def reward_function(self, prompts, completions, **kwargs) -> List[float]:
         """Reward на основе verifier.
-        
+
         ИСПРАВЛЕНО: Получаем правильные ответы из dataset напрямую,
         а не из промпта (где их больше нет).
         
@@ -152,14 +152,14 @@ class DCCircuitRLTrainer:
         """Настройка GRPO тренера."""
         train_dataset = DCCircuitDataset(self.config, self.circuit_config, self.verifier_config)
         self.dataset = train_dataset  # Сохраняем для reward функции
-
+        
         training_args = GRPOConfig(
             use_vllm=True, 
             learning_rate=self.config.learning_rate,
-            adam_beta1=0.9,
-            adam_beta2=0.99,
-            weight_decay=0.1,
-            warmup_ratio=0.1,
+            adam_beta1=self.config.adam_beta1,
+            adam_beta2=self.config.adam_beta2,
+            weight_decay=self.config.weight_decay,
+            warmup_ratio=self.config.warmup_ratio,
             lr_scheduler_type="cosine",
             optim="adamw_8bit",
             logging_steps=1,
@@ -170,11 +170,11 @@ class DCCircuitRLTrainer:
             max_completion_length=self.config.max_completion_length,  
             max_steps=self.config.max_steps,
             save_steps=self.config.save_steps,
-            max_grad_norm=0.1,
+            max_grad_norm=self.config.max_grad_norm,
             report_to="none",
             output_dir=self.config.output_dir,
-            temperature=0.7,
-            repetition_penalty=1.1,
+            temperature=self.config.temperature,
+            repetition_penalty=self.config.repetition_penalty,
         )
         
         # Создание тренера GRPO

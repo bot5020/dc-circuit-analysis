@@ -21,8 +21,16 @@ class TrainingConfig:
     # Обучение
     learning_rate: float = 1e-5
     max_steps: int = 500
+    save_steps: int = 100
     batch_size: int = 4
     gradient_accumulation_steps: int = 4
+    
+    # Оптимизатор
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.99
+    weight_decay: float = 0.1
+    warmup_ratio: float = 0.1
+    max_grad_norm: float = 0.1
     
     # Генерация
     max_seq_length: int = 4096
@@ -30,6 +38,7 @@ class TrainingConfig:
     num_generations: int = 3
     temperature: float = 0.7
     top_p: float = 0.95
+    repetition_penalty: float = 1.1
     do_sample: bool = False
     gpu_memory_utilization: float = 0.25
     
