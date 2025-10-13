@@ -3,11 +3,11 @@ numpy>=1.21.0
 matplotlib>=3.5.0
 
 # === ML БИБЛИОТЕКИ ===
-torch>=2.0.0
+torch>=2.6.0
 transformers>=4.36.0
 vllm
 flash-attn==2.8.2
-xformers==0.0.22.post7
+xformers>=0.0.29
 
 # === RL ОБУЧЕНИЕ (GRPO) ===
 trl>=0.8.0
