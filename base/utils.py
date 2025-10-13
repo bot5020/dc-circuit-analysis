@@ -122,5 +122,7 @@ def get_system_prompt() -> str:
         "- Use exactly 3 decimal places (e.g., 1.234)\n"
         "- No units in the final answer\n"
         "- Be precise and methodical\n"
-        "- Check your work for reasonableness"
+        "- Check your work for reasonableness\n"
+        "- NEVER use <tool_call> tags - they are forbidden\n"
+        "- ONLY use <think> and <answer> tags as shown in examples"
     )

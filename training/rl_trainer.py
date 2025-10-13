@@ -186,6 +186,7 @@ class DCCircuitRLTrainer:
             # Инициализируем переменные
             accuracy_score = None
             reward = 0.0
+            extracted_answer = None
             
             if correct_answer is None:
                 # Если не нашли, используем случайный reward
@@ -197,9 +198,11 @@ class DCCircuitRLTrainer:
                 has_tool_call = "<tool_call>" in completion_str
                 
                 if has_tool_call and not has_correct_format:
-                    print(f"⚠️  Неправильный формат ответа (tool_call) для индекса {idx}")
-                    # Штрафуем за неправильный формат
-                    reward = 0.0
+                    print(f"⚠️  Запрещенный формат tool_call для индекса {idx} - штраф!")
+                    # Штрафуем за использование запрещенного tool_call формата
+                    reward = -1.0  # Отрицательный reward за неправильный формат
+                    accuracy_score = 0.0
+                    print(f"❌ Штраф за tool_call: reward = {reward}")
                 else:
                     # Создаем минимальный Data объект для верификатора
                     data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
@@ -218,7 +221,9 @@ class DCCircuitRLTrainer:
                     "batch_idx": idx,
                     "completion_has_tool_call": "<tool_call>" in str(completion),
                     "completion_has_think": "<think>" in str(completion),
-                    "completion_has_answer": "<answer>" in str(completion)
+                    "completion_has_answer": "<answer>" in str(completion),
+                    "parsed_from_tool_call": has_tool_call and not has_correct_format,
+                    "extracted_answer": extracted_answer if 'extracted_answer' in locals() else None
                 }
             )
             
