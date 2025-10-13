@@ -70,6 +70,11 @@ class DCCircuitDataset(Dataset):
 
 class DCCircuitRLTrainer:
     """Тренер для GRPO обучения на задачах анализа DC цепей"""
+    
+    # Константы
+    REWARD_SCALE_FACTOR = 2.0
+    FORMAT_BONUS = 0.5  # Бонус за правильный формат ответа
+    RANDOM_STATE = 3407
 
     def __init__(self, config: TrainingConfig = None, circuit_config: CircuitConfig = None, verifier_config: VerifierConfig = None):
         """Инициализирует тренер с конфигурацией"""
@@ -125,7 +130,7 @@ class DCCircuitRLTrainer:
             lora_dropout=self.config.lora_dropout,
             bias="none",
             use_gradient_checkpointing="unsloth",
-            random_state=3407,
+            random_state=self.RANDOM_STATE,
         )
         
         self.model.train()
@@ -171,50 +176,41 @@ class DCCircuitRLTrainer:
             # Ищем в dataset по вопросу из промпта
             correct_answer = None
             
-            # Простой поиск по индексу (если промпты идут в том же порядке)
             if idx < len(self.dataset):
                 correct_answer = self.dataset[idx]["answer"]
                 print(f"✅ Найден ответ по индексу {idx}: {correct_answer}")
             else:
-                # Альтернативный поиск по содержимому
                 for data_item in self.dataset:
                     if data_item["question"] in prompt_text:
                         correct_answer = data_item["answer"]
                         print(f"✅ Найден ответ по содержимому: {correct_answer}")
                         break
             
-            # Инициализируем переменные
             accuracy_score = None
             reward = 0.0
-            extracted_answer = None
             
             if correct_answer is None:
-                # Если не нашли, используем случайный reward
                 print(f"❌ Не найден правильный ответ для индекса {idx}")
             else:
-                # Проверяем формат ответа
-                completion_str = str(completion)
-                has_correct_format = "<think>" in completion_str and "<answer>" in completion_str
-                has_tool_call = "<tool_call>" in completion_str
+                data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
+                completion_str_for_verifier = str(completion) if not isinstance(completion, str) else completion
+                accuracy_score = self._verifier.get_accuracy_score(data, completion_str_for_verifier)
                 
-                if has_tool_call and not has_correct_format:
-                    print(f"⚠️  Запрещенный формат tool_call для индекса {idx} - штраф!")
-                    # Штрафуем за использование запрещенного tool_call формата
-                    reward = -1.0  # Отрицательный reward за неправильный формат
-                    accuracy_score = 0.0
-                    print(f"❌ Штраф за tool_call: reward = {reward}")
-                    print(f"🔍 Debug: completion type = {type(completion)}")
-                    print(f"🔍 Debug: completion_str[:200] = {completion_str[:200]}")
-                else:
-                    # Создаем минимальный Data объект для верификатора
-                    data = Data(question="", answer=correct_answer, difficulty=1, metadata={})
-                    # Преобразуем completion в строку если это список
-                    completion_str_for_verifier = str(completion) if not isinstance(completion, str) else completion
-                    accuracy_score = self._verifier.get_accuracy_score(data, completion_str_for_verifier)
-                    reward = accuracy_score * 2.0  # Масштабируем reward [0, 2]
-                    print(f"✅ Правильный формат, accuracy: {accuracy_score:.3f}, reward: {reward:.3f}")
+                # Базовый reward за правильность
+                base_reward = accuracy_score * self.REWARD_SCALE_FACTOR
+                
+                # Бонус за правильный формат
+                format_bonus = 0.0
+                has_think_tag = "<think>" in completion_str_for_verifier
+                has_answer_tag = "<answer>" in completion_str_for_verifier
+                
+                if has_think_tag and has_answer_tag:
+                    format_bonus = self.FORMAT_BONUS
+                    print(f"🎯 Бонус за формат: +{format_bonus:.1f}")
+                
+                reward = base_reward + format_bonus
+                print(f"✅ Accuracy: {accuracy_score:.3f}, base_reward: {base_reward:.3f}, total_reward: {reward:.3f}")
             
-            # Логируем взаимодействие с LLM
             self.log_llm_interaction(
                 prompt=prompt_text,
                 completion=completion,
@@ -222,12 +218,13 @@ class DCCircuitRLTrainer:
                 metadata={
                     "correct_answer": correct_answer,
                     "accuracy_score": accuracy_score if correct_answer else None,
+                    "base_reward": base_reward if correct_answer else 0.0,
+                    "format_bonus": format_bonus,
+                    "total_reward": reward,
                     "batch_idx": idx,
-                    "completion_has_tool_call": "<tool_call>" in str(completion),
-                    "completion_has_think": "<think>" in str(completion),
-                    "completion_has_answer": "<answer>" in str(completion),
-                    "parsed_from_tool_call": has_tool_call and not has_correct_format,
-                    "extracted_answer": extracted_answer if 'extracted_answer' in locals() else None
+                    "completion_has_think": has_think_tag,
+                    "completion_has_answer": has_answer_tag,
+                    "has_correct_format": has_think_tag and has_answer_tag
                 }
             )
             

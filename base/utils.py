@@ -73,22 +73,18 @@ def get_system_prompt() -> str:
         
         "FUNDAMENTAL LAWS:\n"
         "• Ohm's Law: V = I × R, I = V/R, R = V/I\n"
-        "• Kirchhoff's Current Law (KCL): ΣI_in = ΣI_out\n"
-        "• Kirchhoff's Voltage Law (KVL): ΣV = 0\n"
         "• Series: R_total = R₁ + R₂ + ..., I_total = I₁ = I₂\n"
         "• Parallel: 1/R_total = 1/R₁ + 1/R₂ + ..., V_total = V₁ = V₂\n\n"
         
         "APPROACH:\n"
-        "1. Identify circuit topology (series, parallel, mixed)\n"
-        "2. Apply appropriate laws (Ohm, KCL, KVL)\n"
-        "3. Calculate equivalent resistance if needed\n"
-        "4. Solve for the requested quantity step by step\n"
-        "5. Verify your answer makes physical sense\n\n"
+        "1. Identify circuit topology (series or parallel)\n"
+        "2. Apply Ohm's Law and series/parallel rules\n"
+        "3. Solve for the requested quantity step by step\n"
+        "4. Verify your answer makes physical sense\n\n"
         
         "CIRCUIT TYPES:\n"
         "• Series: Current same, voltages add up\n"
-        "• Parallel: Voltage same, currents add up\n"
-        "• Mixed: Combination of series and parallel\n\n"
+        "• Parallel: Voltage same, currents add up\n\n"
         
         "RESPONSE FORMAT:\n"
         "Always respond in this exact format:\n"
@@ -123,6 +119,7 @@ def get_system_prompt() -> str:
         "- No units in the final answer\n"
         "- Be precise and methodical\n"
         "- Check your work for reasonableness\n"
-        "- NEVER use <tool_call> tags - they are forbidden\n"
         "- ONLY use <think> and <answer> tags as shown in examples"
+        "- Be concise and to the point"
+        "- Think step by step"
     )

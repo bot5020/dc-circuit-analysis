@@ -26,15 +26,13 @@ def create_circuit_prompt(metadata: dict, question_type: str, target_resistor: s
     elif circuit_type == "parallel":
         circuit_desc = f"Parallel circuit with voltage source V={voltage}V and resistors: {resistor_list}"
     else:
-        circuit_desc = f"Mixed (series-parallel) circuit with voltage source V={voltage}V and resistors: {resistor_list}"
+        circuit_desc = f"Circuit with voltage source V={voltage}V and resistors: {resistor_list}"
 
     # Формулирование вопроса
     if question_type == "current":
         question = f"Find the current through {target_resistor} (in Amperes)"
     elif question_type == "voltage":
         question = f"Find the voltage across {target_resistor} (in Volts)"
-    elif question_type == "equivalent_resistance":
-        question = "Find the equivalent resistance of the circuit (in Ohms)"
     else:
         question = f"Find the {question_type} for {target_resistor}"
 
