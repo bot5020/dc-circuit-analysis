@@ -27,7 +27,7 @@ class TrainingConfig:
     learning_rate: float = 5e-5
     max_steps: int = 100 
     save_steps: int = 50 
-    batch_size: int = 16
+    batch_size: int = 64
     gradient_accumulation_steps: int = 1  
     
     # Оптимизатор
@@ -40,7 +40,7 @@ class TrainingConfig:
     # Генерация
     max_seq_length: int = 11000
     max_completion_length: int = 11000
-    num_generations: int = 8
+    num_generations: int = 16
     temperature: float = 0.7
     top_p: float = 0.95
     repetition_penalty: float = 1.1
