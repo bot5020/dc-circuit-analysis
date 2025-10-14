@@ -42,24 +42,29 @@ class DCCircuitDataset(Dataset):
         """Генерация данных через game.generate() (один раз при инициализации)"""
         if self.data is not None:
             return  # Уже сгенерировано
-            
+
         all_data = []
+
         for difficulty in self.config.difficulties:
             data_list = self.game.generate(
                 num_of_questions=self.config.samples_per_difficulty,
                 difficulty=difficulty
             )
-            
-            all_data.extend([{
-                "prompt": [
-                {"role": "system", "content": get_system_prompt()},
-                {"role": "user", "content": data.question}
-                ],
-                "question": data.question,
-                "answer": f"{float(data.answer):.3f}",
-                "difficulty": data.difficulty
-            } for data in data_list])
-        
+
+            for data in data_list:
+                question_text = data.question
+                answer_text = f"{float(data.answer):.3f}"
+
+                all_data.append({
+                    "prompt": [
+                    {"role": "system", "content": get_system_prompt()},
+                    {"role": "user", "content": question_text}
+                    ],
+                    "question": question_text,
+                    "answer": answer_text,  # Правильный ответ (уже используется в reward функции)
+                    "difficulty": data.difficulty
+                })
+
         self.data = all_data
 
     def __len__(self) -> int:
@@ -162,21 +167,38 @@ class DCCircuitRLTrainer:
     
     def reward_function(self, prompts, completions, **kwargs) -> List[float]:
         """Reward на основе verifier.
-        
-        В RL среде используем прямой доступ к правильным ответам по индексу.
+
         """
         if self._verifier is None:
             self._verifier = DCCircuitVerifier(self.verifier_config)
-        
+
         rewards = []
-        for idx, completion in enumerate(completions):
-            # Прямой доступ к правильному ответу через индекс
-            if idx < len(self.dataset.data):
-                correct_answer = self.dataset.data[idx]["answer"]
+
+        # Пытаемся получить правильные ответы из различных источников
+        correct_answers = None
+
+        if 'answer' in kwargs and kwargs['answer'] is not None:
+            correct_answers = kwargs['answer']
+
+        # Если ничего не передано, используем резервный метод через датасет
+        else:
+            print("⚠️ GRPO не передал правильные ответы, используем резервный метод")
+            # Фоллбек на старый костыльный метод (но без question_to_answer словаря)
+            pass  # Будем использовать индекс напрямую
+
+        for idx, (prompt, completion) in enumerate(zip(prompts, completions)):
+            # Получаем правильный ответ
+            if correct_answers is not None and idx < len(correct_answers):
+                correct_answer = correct_answers[idx]
             else:
-                print(f"❌ Индекс {idx} выходит за границы датасета")
-                rewards.append(0.0)
-                continue
+                print("⚠️ GRPO не передал правильные ответы, используем резервный метод")
+                # Фоллбек: используем прямой доступ к датасету (предполагая, что порядок совпадает)
+                if hasattr(self, 'dataset') and self.dataset and idx < len(self.dataset.data):
+                    correct_answer = self.dataset.data[idx]["answer"]
+                else:
+                    print(f"❌ Не найден правильный ответ для индекса {idx}")
+                    rewards.append(0.0)
+                    continue
             
             # Проверяем формат ответа модели
             completion_str = str(completion) if not isinstance(completion, str) else completion
@@ -270,6 +292,8 @@ class DCCircuitRLTrainer:
             args=training_args,
             train_dataset=train_dataset,
         )
+
+        self.dataset = train_dataset  # Сохраняем ссылку на датасет
         
 
     def train(self):
