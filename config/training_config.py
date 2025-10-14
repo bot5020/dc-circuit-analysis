@@ -27,7 +27,7 @@ class TrainingConfig:
     learning_rate: float = 5e-5
     max_steps: int = 100 
     save_steps: int = 50 
-    batch_size: int = 32
+    batch_size: int = 16
     gradient_accumulation_steps: int = 1  
     max_prompt_length: int = 4096
     # Оптимизатор
@@ -40,21 +40,21 @@ class TrainingConfig:
     # Генерация
     max_seq_length: int = 11000
     max_completion_length: int = 11000
-    num_generations: int = 16
+    num_generations: int = 4
     temperature: float = 0.7
     top_p: float = 0.95
     repetition_penalty: float = 1.1
     do_sample: bool = False
-    gpu_memory_utilization: float = 0.30 
+    gpu_memory_utilization: float = 0.35 
 
     
     # Dataset
     difficulties: List[int] = None
-    samples_per_difficulty: int = 20
+    samples_per_difficulty: int = 25
 
     def __post_init__(self):
         if self.difficulties is None:
-            self.difficulties = [1, 2, 3, 4, 5, 6]  # 6 уровней сложности
+            self.difficulties = [1, 2, 3, 4, 5, 6]
         
         if self.lora_target_modules is None:
             self.lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
