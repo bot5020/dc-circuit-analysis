@@ -1,4 +1,4 @@
-"""Упрощенный генератор электрических цепей согласно ТЗ"""
+"""Генератор электрических цепей согласно ТЗ"""
 
 import random
 from typing import Dict, Tuple, Optional
@@ -7,19 +7,26 @@ from config import CircuitConfig
 
 
 class CircuitGenerator:
-    """Упрощенный генератор электрических цепей: только последовательные и параллельные."""
+    """Генератор электрических цепей: только последовательные и параллельные."""
     
     def __init__(self, config: CircuitConfig = None):
         self.config = config or CircuitConfig()
         self.difficulty_configs = self._build_difficulty_configs()
     
     def _build_difficulty_configs(self) -> Dict[int, Dict]:
-        """Упрощенные конфигурации сложности (2 уровня)."""
         configs = {}
-        # Уровень 1: Последовательные цепи (2 резистора)
-        configs[1] = {"min_resistors": 2, "max_resistors": 2, "topology": "series"}
-        # Уровень 2: Параллельные цепи (2 резистора)
-        configs[2] = {"min_resistors": 2, "max_resistors": 2, "topology": "parallel"}
+        # Уровень 1: Простые последовательные цепи (2-3 резистора)
+        configs[1] = {"min_resistors": 2, "max_resistors": 3, "topology": "series"}
+        # Уровень 2: Простые параллельные цепи (2-3 резистора)
+        configs[2] = {"min_resistors": 2, "max_resistors": 3, "topology": "parallel"}
+        # Уровень 3: Средние последовательные цепи (4-6 резисторов)
+        configs[3] = {"min_resistors": 4, "max_resistors": 6, "topology": "series"}
+        # Уровень 4: Средние параллельные цепи (4-6 резисторов)
+        configs[4] = {"min_resistors": 4, "max_resistors": 6, "topology": "parallel"}
+        # Уровень 5: Сложные последовательные цепи (7-10 резисторов)
+        configs[5] = {"min_resistors": 7, "max_resistors": 10, "topology": "series"}
+        # Уровень 6: Сложные параллельные цепи (7-10 резисторов)
+        configs[6] = {"min_resistors": 7, "max_resistors": 10, "topology": "parallel"}
         return configs
     
     def generate_circuit(self, difficulty: int = 1, seed: Optional[int] = None, **kwargs) -> Tuple[Circuit, str, Dict]:
@@ -42,26 +49,40 @@ class CircuitGenerator:
             return self._generate_series(2)
     
     def _generate_series(self, num_resistors: int) -> Tuple[Circuit, str, Dict]:
-        """Генерирует простую последовательную цепь"""
+        """Генерирует последовательную цепь с заданным количеством резисторов"""
         circuit = Circuit()
-        # Простые узлы: A, B, C
-        nodes = ["A", "B", "C"]
+        
+        # Создаем узлы: A (источник), промежуточные узлы, B (земля)
+        nodes = ["A"]  # Начальный узел (источник +)
+        for i in range(num_resistors - 1):
+            nodes.append(f"N{i+1}")  # Промежуточные узлы
+        nodes.append("B")  # Конечный узел (земля)
         
         voltage = random.randint(5, 24)  # Простые значения напряжения
-        circuit.add_voltage_source("A", "C", voltage)
-        circuit.set_ground("C")
+        circuit.add_voltage_source("A", "B", voltage)
+        circuit.set_ground("B")
         
         resistors = {}
-        # Простые сопротивления - только для 2 резисторов максимум
-        for i in range(min(num_resistors, 2)):
+        # Создаем цепочку резисторов: A-N1-N2-...-B
+        for i in range(num_resistors):
             resistance = random.randint(10, 100)  # Простые значения
             resistor_name = f"R{i+1}"
+            
             if i == 0:
-                circuit.add_resistor("A", "B", resistance)
-                resistors[resistor_name] = ("A", "B", resistance)
+                # Первый резистор: A -> N1
+                circuit.add_resistor("A", "N1", resistance)
+                resistors[resistor_name] = ("A", "N1", resistance)
+            elif i == num_resistors - 1:
+                # Последний резистор: N{i-1} -> B
+                prev_node = f"N{i}"
+                circuit.add_resistor(prev_node, "B", resistance)
+                resistors[resistor_name] = (prev_node, "B", resistance)
             else:
-                circuit.add_resistor("B", "C", resistance)
-                resistors[resistor_name] = ("B", "C", resistance)
+                # Промежуточные резисторы: N{i} -> N{i+1}
+                current_node = f"N{i}"
+                next_node = f"N{i+1}"
+                circuit.add_resistor(current_node, next_node, resistance)
+                resistors[resistor_name] = (current_node, next_node, resistance)
         
         # Для последовательных цепей только напряжение (ток одинаков везде)
         question_types = ["voltage"]
@@ -71,25 +92,26 @@ class CircuitGenerator:
         metadata = {
             "circuit_type": "series",
             "voltage_source": voltage,
-            "voltage_sources": {("A", "C"): voltage},
+            "voltage_sources": {("A", "B"): voltage},
             "resistors": resistors,
             "question_type": question_type,
             "target_resistor": target_resistor,
             "nodes": nodes,
             "source_node": "A",
-            "ground_node": "C"
+            "ground_node": "B"
         }
         
         return circuit, question_type, metadata
     
     def _generate_parallel(self, num_resistors: int) -> Tuple[Circuit, str, Dict]:
-        """Генерирует простую параллельную цепь"""
+        """Генерирует параллельную цепь с заданным количеством резисторов"""
         circuit = Circuit()
         voltage = random.randint(5, 24)  # Простые значения
         circuit.add_voltage_source("A", "B", voltage)
         circuit.set_ground("B")
         
         resistors = {}
+        # Все резисторы подключены параллельно между узлами A и B
         for i in range(num_resistors):
             resistance = random.randint(10, 100)  # Простые значения
             resistor_name = f"R{i+1}"

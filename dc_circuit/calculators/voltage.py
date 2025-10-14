@@ -2,7 +2,7 @@
 
 from typing import Dict, Optional, Any
 from .base import AnswerCalculator
-from dc_circuit.solver import CircuitSolver, Circuit
+from dc_circuit.solver import Circuit
 
 
 class VoltageCalculator(AnswerCalculator):

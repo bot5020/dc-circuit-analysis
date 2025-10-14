@@ -132,7 +132,7 @@ TrainingConfig(
     temperature=0.7,
     
     # Dataset (упрощенный)
-    difficulties=[1, 2],  # Только series и parallel
+    difficulties=[1, 2, 3, 4, 5, 6],  # Все 6 уровней сложности
     samples_per_difficulty=100
 )
 ```
@@ -250,7 +250,7 @@ tbank2/
 ### **CircuitConfig (упрощенный):**
 ```python
 CircuitConfig(
-    difficulties=[1, 2],           # Только series и parallel
+    difficulties=[1, 2, 3, 4, 5, 6],  # Все 6 уровней сложности
     voltage_range=(5, 24),        # Простые напряжения
     resistance_range=(10, 100),    # Простые сопротивления
     topology_configs={

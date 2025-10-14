@@ -488,28 +488,6 @@ class Evaluator:
         # Диаграмма строгого формата
         print("🔒 СТРОГИЙ ФОРМАТ:")
 
-        
-        # Сравнение улучшений
-        print("📊 УЛУЧШЕНИЯ:")
-        if acc_pe > acc_zero:
-            print(f"✅ Prompt Engineering улучшил точность на {acc_pe - acc_zero:.1%}")
-        else:
-            print(f"❌ Prompt Engineering снизил точность на {acc_zero - acc_pe:.1%}")
-            
-        if acc_grpo > acc_pe:
-            print(f"🚀 GRPO обучение улучшил точность на {acc_grpo - acc_pe:.1%}")
-        else:
-            print(f"⚠️  GRPO обучение снизил точность на {acc_pe - acc_grpo:.1%}")
-            
-        if fmt_pe > fmt_zero:
-            print(f"✅ Prompt Engineering улучшил формат на {fmt_pe - fmt_zero:.1%}")
-        else:
-            print(f"❌ Prompt Engineering снизил формат на {fmt_zero - fmt_pe:.1%}")
-            
-        if fmt_grpo > fmt_pe:
-            print(f"🚀 GRPO обучение улучшил формат на {fmt_grpo - fmt_pe:.1%}")
-        else:
-            print(f"⚠️  GRPO обучение снизил формат на {fmt_pe - fmt_grpo:.1%}")
     
     def _print_bar_chart(self, data):
         """Создает ASCII bar chart."""
