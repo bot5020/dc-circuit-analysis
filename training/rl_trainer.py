@@ -105,7 +105,25 @@ class DCCircuitRLTrainer:
             use_flash_attention=self.config.use_flash_attention,
             device_map="auto"  # Автоматическое размещение на GPU
         )
-        
+
+        # Устанавливаем chat template
+        self.tokenizer.chat_template = """{% for message in messages %}
+            {% if message['role'] == 'system' %}
+            <|im_start|>system
+            {{ message['content'] }}<|im_end|>
+            {% elif message['role'] == 'user' %}
+            <|im_start|>user
+            {{ message['content'] }}<|im_end|>
+            {% elif message['role'] == 'assistant' %}
+            <|im_start|>assistant
+            {{ message['content'] }}<|im_end|>
+            {% endif %}
+            {% endfor %}"""
+
+        # Устанавливаем pad_token если не установлен
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
         # LoRA обучение
         self.model = FastLanguageModel.get_peft_model(
             self.model,
