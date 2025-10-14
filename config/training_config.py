@@ -9,7 +9,7 @@ class TrainingConfig:
     """Конфигурация для GRPO обучения модели."""
     
     # Модель
-    model_name: str = "unsloth/Qwen3-0.6B" 
+    model_name: str = "unsloth/Qwen2.5-0.5B" 
     output_dir: str = "./dc_circuit_model_rl"
     
     # Формат модели
@@ -27,7 +27,7 @@ class TrainingConfig:
     learning_rate: float = 2e-5
     max_steps: int = 200 
     save_steps: int = 50 
-    batch_size: int = 32
+    batch_size: int = 16
     gradient_accumulation_steps: int = 1  
     
     # Оптимизатор
