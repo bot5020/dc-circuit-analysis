@@ -14,6 +14,7 @@ from typing import List, Dict
 import re
 import torch
 from unsloth import FastLanguageModel
+from vllm import LLM, SamplingParams
 
 from base.data import Data
 from dc_circuit.game import DCCircuitGame
@@ -21,19 +22,16 @@ from config import CircuitConfig, VerifierConfig, TrainingConfig
 from base.utils import get_system_prompt
 
 
+
 class Evaluator:
     """Оценщик для тестирования моделей."""
-    
-    # Константы
-    DEFAULT_GPU_MEMORY_UTILIZATION = 0.55
-    DEFAULT_TEMPERATURE = 0.7
-    DEFAULT_SAMPLES_PER_DIFFICULTY = 3
+
     
     def __init__(
         self,
-        baseline_model: str = "unsloth/Qwen3-0.6B",
+        baseline_model: str = "unsloth/Qwen2.5-0.5B",
         trained_model_path: str = "./dc_circuit_model_rl",
-        samples_per_difficulty: int = DEFAULT_SAMPLES_PER_DIFFICULTY
+        samples_per_difficulty: int = 5
     ):
         """Инициализация оценщика.
         
@@ -96,45 +94,49 @@ class Evaluator:
         return test_data
     
     def load_model(self, model_path: str, is_trained: bool = False):
-        """Загружает модель.
+        """Загружает модель через vLLM.
         
         Args:
             model_path: Путь к модели
             is_trained: True если это обученная модель с LoRA
         
         Returns:
-            (model, tokenizer)
+            (llm, sampling_params)
         """
-        print(f"📥 Загрузка модели: {model_path}")
+        print(f"📥 Загрузка модели через vLLM: {model_path}")
         
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=model_path,
-            max_seq_length=self.training_config.max_seq_length,
-            load_in_4bit=False,
+        # Настройки vLLM
+        llm = LLM(
+            model=model_path,
+            max_model_len=self.training_config.max_seq_length,
             dtype='bfloat16',
-            fast_inference=True,
-            device_map="auto",
-            gpu_memory_utilization=self.DEFAULT_GPU_MEMORY_UTILIZATION
+            gpu_memory_utilization=self.DEFAULT_GPU_MEMORY_UTILIZATION,
+            trust_remote_code=True,
+            enforce_eager=False
         )
         
-        # Режим инференса
-        FastLanguageModel.for_inference(model)
+        # Параметры семплирования
+        sampling_params = SamplingParams(
+            temperature=self.DEFAULT_TEMPERATURE,
+            max_tokens=self.training_config.max_completion_length,
+            stop=["<|im_end|>", "</s>"]
+        )
         
-        print(f"  ✓ Модель загружена\n")
-        return model, tokenizer
+        print(f"  ✓ Модель загружена через vLLM\n")
+        return llm, sampling_params
     
     def generate_answer(
         self, 
-        model, 
-        tokenizer, 
+        llm, 
+        sampling_params, 
         question: str, 
         use_system_prompt: bool = True
     ) -> str:
-        """Генерирует ответ модели на вопрос.
+        """Генерирует ответ модели на вопрос через vLLM.
         
         Args:
-            model: Модель
-            tokenizer: Токенизатор
+            llm: vLLM модель
+            sampling_params: Параметры семплирования
             question: Вопрос
             use_system_prompt: Использовать ли системный промпт
         
@@ -154,38 +156,23 @@ class Evaluator:
                 {"role": "user", "content": question}
             ]
         
-        # Применяем chat template
-        prompt = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-        
-        # Генерируем ответ
-        inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
-        
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=self.training_config.max_completion_length,
-            temperature=self.DEFAULT_TEMPERATURE,  
-            do_sample=False,
-            pad_token_id=tokenizer.eos_token_id
-        )
-        
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Формируем промпт для vLLM (простой формат)
+        if use_system_prompt:
+            prompt = f"<|im_start|>system\n{get_system_prompt()}<|im_end|>\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n"
+        else:
+            prompt = f"<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n"
         
         # 🔍 ОТЛАДОЧНЫЙ ВЫВОД ГЕНЕРАЦИИ
         print(f"\n🔧 ОТЛАДКА ГЕНЕРАЦИИ:")
         print(f"📝 ПРОМПТ (первые 200 символов): {prompt[:200]}...")
+        
+        # Генерируем ответ через vLLM
+        outputs = llm.generate([prompt], sampling_params)
+        response = outputs[0].outputs[0].text
+        
         print(f"🤖 ПОЛНЫЙ ОТВЕТ МОДЕЛИ:")
         print(f"{response}")
         print(f"📏 Длина ответа: {len(response)} символов")
-        
-        # Убираем промпт из ответа
-        if prompt in response:
-            response = response.replace(prompt, "").strip()
-            print(f"✂️ ОТВЕТ ПОСЛЕ ОЧИСТКИ:")
-            print(f"{response}")
         
         # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если модель генерирует весь системный промпт,
         # извлекаем только часть после "assistant"
@@ -203,8 +190,8 @@ class Evaluator:
     
     def evaluate_model_on_data(
         self,
-        model,
-        tokenizer,
+        llm,
+        sampling_params,
         test_data: Dict[int, List[Data]],
         method_name: str,
         use_system_prompt: bool = True
@@ -212,14 +199,14 @@ class Evaluator:
         """Оценивает модель на тестовых данных.
         
         Args:
-            model: Модель
-            tokenizer: Токенизатор
+            llm: vLLM модель
+            sampling_params: Параметры семплирования
             test_data: Тестовые данные
             method_name: Название метода для вывода
             use_system_prompt: Использовать ли системный промпт
         
         Returns:
-            Словарь {difficulty: {"accuracy": float, "format_score": float}}
+            Словарь {difficulty: {"accuracy": float, "format_score": float, "strict_format_score": float}}
         """
         print(f"🧪 Тестирование: {method_name}")
         
@@ -245,7 +232,7 @@ class Evaluator:
             for i, data in enumerate(data_list):
                 # Генерируем ответ
                 response = self.generate_answer(
-                    model, tokenizer, data.question, use_system_prompt
+                    llm, sampling_params, data.question, use_system_prompt
                 )
                 
                 # 🔍 ОТЛАДОЧНЫЙ ВЫВОД
@@ -331,7 +318,7 @@ class Evaluator:
         test_data = self.generate_test_data()
         
         # 2. Загрузка baseline модели
-        baseline_model, baseline_tokenizer = self.load_model(
+        baseline_llm, baseline_sampling_params = self.load_model(
             self.baseline_model_name, 
             is_trained=False
         )
@@ -339,8 +326,8 @@ class Evaluator:
         # 3. Zero-shot оценка (без специального промпта)
         print("-"*70)
         zero_shot_results = self.evaluate_model_on_data(
-            baseline_model,
-            baseline_tokenizer,
+            baseline_llm,
+            baseline_sampling_params,
             test_data,
             "Zero-shot (no system prompt)",
             use_system_prompt=False
@@ -349,40 +336,41 @@ class Evaluator:
         # 4. Prompt Engineering оценка (с системным промптом)
         print("-"*70)
         prompt_eng_results = self.evaluate_model_on_data(
-            baseline_model,
-            baseline_tokenizer,
+            baseline_llm,
+            baseline_sampling_params,
             test_data,
             "Prompt Engineering (with system prompt)",
             use_system_prompt=True
         )
         
         # Очистка памяти
-        del baseline_model, baseline_tokenizer
+        del baseline_llm, baseline_sampling_params
         torch.cuda.empty_cache()
         
         # 5. GRPO Trained оценка (если модель существует)
         print("-"*70)
         grpo_results = {}
         if os.path.exists(self.trained_model_path):
-            trained_model, trained_tokenizer = self.load_model(
+            trained_llm, trained_sampling_params = self.load_model(
                 self.trained_model_path,
                 is_trained=True
             )
             
             grpo_results = self.evaluate_model_on_data(
-                trained_model,
-                trained_tokenizer,
+                trained_llm,
+                trained_sampling_params,
                 test_data,
                 "GRPO Trained (with LoRA)",
                 use_system_prompt=True
             )
             
-            del trained_model, trained_tokenizer
+            del trained_llm, trained_sampling_params
             torch.cuda.empty_cache()
         else:
             print(f"⚠️  Обученная модель не найдена: {self.trained_model_path}")
             print(f"   Пропускаем оценку GRPO Trained\n")
-            grpo_results = {1: 0.0, 2: 0.0}
+            grpo_results = {1: {"accuracy": 0.0, "format_score": 0.0, "strict_format_score": 0.0}, 
+                           2: {"accuracy": 0.0, "format_score": 0.0, "strict_format_score": 0.0}}
         
         # 6. Вывод итоговых результатов
         self.print_summary(zero_shot_results, prompt_eng_results, grpo_results)
@@ -499,15 +487,7 @@ class Evaluator:
         print()
         # Диаграмма строгого формата
         print("🔒 СТРОГИЙ ФОРМАТ:")
-        # Переиспользуем последние рассчитанные средние из контекста print_summary
-        # Здесь диаграмма будет построена при вызове из print_summary
-        # Значения передаются через локальные переменные
-        # Чтобы упростить, запрашиваем повторно средние (без лишних зависимостей)
-        # Примечание: это не критично по производительности при малых таблицах
-        # Поэтому оставляем простую реализацию в print_summary
-        # Эта функция только рисует, данные формируются выше
-        # (мы не будем тут пересчитывать, просто создадим интерфейс)
-        
+
         
         # Сравнение улучшений
         print("📊 УЛУЧШЕНИЯ:")
@@ -547,9 +527,9 @@ class Evaluator:
 def main():
     """Главная функция."""
     evaluator = Evaluator(
-        baseline_model="unsloth/Qwen3-0.6B",
+        baseline_model="unsloth/Qwen2.5-0.5B",
         trained_model_path="./dc_circuit_model_rl",
-        samples_per_difficulty=20
+        samples_per_difficulty=5
     )
     
     results = evaluator.run_evaluation()

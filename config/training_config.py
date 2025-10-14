@@ -24,10 +24,10 @@ class TrainingConfig:
     lora_target_modules: List[str] = None
     
     # Обучение
-    learning_rate: float = 2e-5
-    max_steps: int = 200 
+    learning_rate: float = 5e-5
+    max_steps: int = 100 
     save_steps: int = 50 
-    batch_size: int = 16
+    batch_size: int = 8
     gradient_accumulation_steps: int = 1  
     
     # Оптимизатор
@@ -49,7 +49,7 @@ class TrainingConfig:
     
     # Dataset
     difficulties: List[int] = None
-    samples_per_difficulty: int = 100
+    samples_per_difficulty: int = 25
 
     def __post_init__(self):
         if self.difficulties is None:
