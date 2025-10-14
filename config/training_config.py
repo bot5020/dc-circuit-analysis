@@ -27,7 +27,7 @@ class TrainingConfig:
     learning_rate: float = 5e-5
     max_steps: int = 100 
     save_steps: int = 50 
-    batch_size: int = 8
+    batch_size: int = 4
     gradient_accumulation_steps: int = 1  
     
     # Оптимизатор
@@ -45,7 +45,7 @@ class TrainingConfig:
     top_p: float = 0.95
     repetition_penalty: float = 1.1
     do_sample: bool = False
-    gpu_memory_utilization: float = 0.35
+    gpu_memory_utilization: float = 0.30 
     
     # Dataset
     difficulties: List[int] = None
