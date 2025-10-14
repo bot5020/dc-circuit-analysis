@@ -11,6 +11,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import List, Dict
+import re
 import torch
 from unsloth import FastLanguageModel
 
@@ -26,11 +27,11 @@ class Evaluator:
     # Константы
     DEFAULT_GPU_MEMORY_UTILIZATION = 0.55
     DEFAULT_TEMPERATURE = 0.7
-    DEFAULT_SAMPLES_PER_DIFFICULTY = 20
+    DEFAULT_SAMPLES_PER_DIFFICULTY = 3
     
     def __init__(
         self,
-        baseline_model: str = "unsloth/qwen3-4b-instruct-2507-unsloth-bnb-4bit",
+        baseline_model: str = "unsloth/Qwen3-0.6B",
         trained_model_path: str = "./dc_circuit_model_rl",
         samples_per_difficulty: int = DEFAULT_SAMPLES_PER_DIFFICULTY
     ):
@@ -52,6 +53,24 @@ class Evaluator:
         
         # Game для генерации и верификации
         self.game = DCCircuitGame(self.circuit_config, self.verifier_config)
+
+    def _has_strict_answer_format(self, response: str) -> bool:
+        """Проверяет строгий формат ответа в <answer>: ровно число с 3 знаками.
+
+        Условия:
+        - В тексте есть теги <answer>...</answer>
+        - Внутри ровно одно число формата X.XXX (3 десятичных знака)
+        - Нет единиц измерения и лишнего текста
+        """
+        if not response:
+            return False
+        # Найти последний <answer>...</answer>
+        tag_matches = re.findall(r"<answer>([\s\S]*?)</answer>", response, flags=re.IGNORECASE)
+        if not tag_matches:
+            return False
+        content = tag_matches[-1].strip()
+        # Должно быть строго число с 3 десятичными, без единиц и текста
+        return bool(re.fullmatch(r"[-+]?\d+\.\d{3}", content))
         
     def generate_test_data(self) -> Dict[int, List[Data]]:
         """Генерирует тестовые данные для всех уровней сложности.
@@ -62,7 +81,7 @@ class Evaluator:
         print("\n📝 Генерация тестовых данных...")
         test_data = {}
         
-        for difficulty in [1, 2]:  # Упрощенная система: только 2 уровня сложности
+        for difficulty in [1, 2]:  
             print(f"  Сложность {difficulty}: генерация {self.samples_per_difficulty} задач...")
             data_list = self.game.generate(
                 num_of_questions=self.samples_per_difficulty,
@@ -91,9 +110,10 @@ class Evaluator:
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=model_path,
             max_seq_length=self.training_config.max_seq_length,
-            load_in_4bit=True,
-            dtype=None,
+            load_in_4bit=False,
+            dtype='bfloat16',
             fast_inference=True,
+            device_map="auto",
             gpu_memory_utilization=self.DEFAULT_GPU_MEMORY_UTILIZATION
         )
         
@@ -154,9 +174,30 @@ class Evaluator:
         
         response = tokenizer.decode(outputs[0], skip_special_tokens=True)
         
+        # 🔍 ОТЛАДОЧНЫЙ ВЫВОД ГЕНЕРАЦИИ
+        print(f"\n🔧 ОТЛАДКА ГЕНЕРАЦИИ:")
+        print(f"📝 ПРОМПТ (первые 200 символов): {prompt[:200]}...")
+        print(f"🤖 ПОЛНЫЙ ОТВЕТ МОДЕЛИ:")
+        print(f"{response}")
+        print(f"📏 Длина ответа: {len(response)} символов")
+        
         # Убираем промпт из ответа
         if prompt in response:
             response = response.replace(prompt, "").strip()
+            print(f"✂️ ОТВЕТ ПОСЛЕ ОЧИСТКИ:")
+            print(f"{response}")
+        
+        # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если модель генерирует весь системный промпт,
+        # извлекаем только часть после "assistant"
+        if "assistant" in response and len(response) > 1000:
+            # Ищем последний "assistant" в ответе
+            assistant_parts = response.split("assistant")
+            if len(assistant_parts) > 1:
+                # Берем только часть после последнего "assistant"
+                response = assistant_parts[-1].strip()
+                print(f"🔧 ИСПРАВЛЕНИЕ: Извлечен только ответ ассистента")
+                print(f"✂️ ФИНАЛЬНЫЙ ОТВЕТ:")
+                print(f"{response}")
         
         return response
     
@@ -181,11 +222,24 @@ class Evaluator:
             Словарь {difficulty: {"accuracy": float, "format_score": float}}
         """
         print(f"🧪 Тестирование: {method_name}")
+        
+        # 🔍 ОТЛАДОЧНЫЙ ВЫВОД СИСТЕМНОГО ПРОМПТА
+        if use_system_prompt:
+            from base.utils import get_system_prompt
+            system_prompt = get_system_prompt()
+            print(f"\n📋 СИСТЕМНЫЙ ПРОМПТ:")
+            print("=" * 80)
+            print(f"{system_prompt}")
+            print("=" * 80)
+        else:
+            print(f"\n📋 РЕЖИМ: Zero-shot (без системного промпта)")
+        
         results = {}
         
         for difficulty, data_list in sorted(test_data.items()):
             correct = 0
             format_correct = 0
+            strict_format_correct = 0
             total = len(data_list)
             
             for i, data in enumerate(data_list):
@@ -194,16 +248,47 @@ class Evaluator:
                     model, tokenizer, data.question, use_system_prompt
                 )
                 
+                # 🔍 ОТЛАДОЧНЫЙ ВЫВОД
+                print(f"\n🔍 ОТЛАДКА ЗАДАЧИ {i+1}/{total} (Сложность {difficulty}):")
+                print("=" * 80)
+                print(f"📋 ПОЛНАЯ ЗАДАЧА:")
+                print(f"{data.question}")
+                print(f"\n✅ ОЖИДАЕМЫЙ ОТВЕТ: {data.answer}")
+                print(f"\n🤖 ОТВЕТ МОДЕЛИ:")
+                print(f"{response}")
+                
+                # Извлекаем ответ из ответа модели
+                from base.utils import extract_answer
+                extracted_answer = extract_answer(response)
+                print(f"\n🔍 ИЗВЛЕЧЕННЫЙ ОТВЕТ: '{extracted_answer}'")
+                
                 # Проверяем правильность
                 is_correct = self.game.verify(data, response)
+                accuracy_score = self.game.verifier.get_accuracy_score(data, response)
+                print(f"\n📊 РЕЗУЛЬТАТ ВЕРИФИКАЦИИ:")
+                print(f"  Правильный: {is_correct}")
+                print(f"  Accuracy Score: {accuracy_score:.3f}")
+                
                 if is_correct:
                     correct += 1
                 
                 # Проверяем формат ответа
                 has_think = "<think>" in response
                 has_answer = "<answer>" in response
-                if has_think and has_answer:
+                format_ok = has_think and has_answer
+                strict_format_ok = self._has_strict_answer_format(response)
+                print(f"\n📝 ФОРМАТ ОТВЕТА:")
+                print(f"  Есть <think>: {has_think}")
+                print(f"  Есть <answer>: {has_answer}")
+                print(f"  Формат правильный: {format_ok}")
+                print(f"  Строгий формат <answer>X.XXX</answer>: {strict_format_ok}")
+                
+                if format_ok:
                     format_correct += 1
+                if strict_format_ok:
+                    strict_format_correct += 1
+                
+                print("=" * 80)
                 
                 # Прогресс
                 if (i + 1) % 5 == 0 or (i + 1) == total:
@@ -211,16 +296,19 @@ class Evaluator:
             
             accuracy = correct / total if total > 0 else 0.0
             format_score = format_correct / total if total > 0 else 0.0
+            strict_format_score = strict_format_correct / total if total > 0 else 0.0
             results[difficulty] = {
                 "accuracy": accuracy,
-                "format_score": format_score
+                "format_score": format_score,
+                "strict_format_score": strict_format_score
             }
-            print(f"  Сложность {difficulty}: {correct}/{total} = {accuracy:.1%} | Формат: {format_correct}/{total} = {format_score:.1%}    ")
+            print(f"  Сложность {difficulty}: {correct}/{total} = {accuracy:.1%} | Формат: {format_correct}/{total} = {format_score:.1%} | Строгий формат: {strict_format_correct}/{total} = {strict_format_score:.1%}    ")
         
         # Общие показатели
         avg_accuracy = sum(r["accuracy"] for r in results.values()) / len(results) if results else 0.0
         avg_format = sum(r["format_score"] for r in results.values()) / len(results) if results else 0.0
-        print(f"  📊 Средняя точность: {avg_accuracy:.1%} | Средний формат: {avg_format:.1%}\n")
+        avg_strict_format = sum(r["strict_format_score"] for r in results.values()) / len(results) if results else 0.0
+        print(f"  📊 Средняя точность: {avg_accuracy:.1%} | Средний формат: {avg_format:.1%} | Средний строгий формат: {avg_strict_format:.1%}\n")
         
         return results
     
@@ -229,6 +317,15 @@ class Evaluator:
         print("================================================")
         print("                ОЦЕНКА МОДЕЛЕЙ DC CIRCUIT ANALYSIS")
         print("================================================")
+        
+        # 🔍 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ
+        print(f"\n🔧 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ:")
+        print(f"📊 Образцов на сложность: {self.samples_per_difficulty}")
+        print(f"🎯 Сложности: {self.circuit_config.difficulties}")
+        print(f"🌡️ Температура: {self.DEFAULT_TEMPERATURE}")
+        print(f"💾 GPU память: {self.DEFAULT_GPU_MEMORY_UTILIZATION}")
+        print(f"📏 Максимальная длина ответа: {self.training_config.max_completion_length}")
+        print("=" * 80)
         
         # 1. Генерация тестовых данных
         test_data = self.generate_test_data()
@@ -357,6 +454,20 @@ class Evaluator:
               f"{grpo.get(2, {}).get('format_score', 0.0):>10.1%} | {avg_grpo_fmt:>6.1%} |")
         
         print()
+        # Таблица строгого формата
+        print("🔒 СТРОГИЙ ФОРМАТ <answer>X.XXX</answer>:")
+        print("| Метод                  | Сложность 1 | Сложность 2 | Среднее |")
+        print("|------------------------|-------------|-------------|---------|")
+        avg_zero_strict = sum(zero_shot[d]["strict_format_score"] for d in zero_shot) / len(zero_shot) if zero_shot else 0.0
+        print(f"| Zero-shot              | {zero_shot.get(1, {}).get('strict_format_score', 0.0):>10.1%} | "
+              f"{zero_shot.get(2, {}).get('strict_format_score', 0.0):>10.1%} | {avg_zero_strict:>6.1%} |")
+        avg_pe_strict = sum(prompt_eng[d]["strict_format_score"] for d in prompt_eng) / len(prompt_eng) if prompt_eng else 0.0
+        print(f"| Prompt Engineering     | {prompt_eng.get(1, {}).get('strict_format_score', 0.0):>10.1%} | "
+              f"{prompt_eng.get(2, {}).get('strict_format_score', 0.0):>10.1%} | {avg_pe_strict:>6.1%} |")
+        avg_grpo_strict = sum(grpo[d]["strict_format_score"] for d in grpo) / len(grpo) if grpo else 0.0
+        print(f"| GRPO Trained           | {grpo.get(1, {}).get('strict_format_score', 0.0):>10.1%} | "
+              f"{grpo.get(2, {}).get('strict_format_score', 0.0):>10.1%} | {avg_grpo_strict:>6.1%} |")
+        print()
         
         # Красивая диаграмма
         self.print_visual_chart(avg_zero_acc, avg_pe_acc, avg_grpo_acc, avg_zero_fmt, avg_pe_fmt, avg_grpo_fmt)
@@ -386,6 +497,17 @@ class Evaluator:
         ])
         
         print()
+        # Диаграмма строгого формата
+        print("🔒 СТРОГИЙ ФОРМАТ:")
+        # Переиспользуем последние рассчитанные средние из контекста print_summary
+        # Здесь диаграмма будет построена при вызове из print_summary
+        # Значения передаются через локальные переменные
+        # Чтобы упростить, запрашиваем повторно средние (без лишних зависимостей)
+        # Примечание: это не критично по производительности при малых таблицах
+        # Поэтому оставляем простую реализацию в print_summary
+        # Эта функция только рисует, данные формируются выше
+        # (мы не будем тут пересчитывать, просто создадим интерфейс)
+        
         
         # Сравнение улучшений
         print("📊 УЛУЧШЕНИЯ:")
@@ -425,9 +547,9 @@ class Evaluator:
 def main():
     """Главная функция."""
     evaluator = Evaluator(
-        baseline_model="unsloth/qwen3-4b-instruct-2507-unsloth-bnb-4bit",
+        baseline_model="unsloth/Qwen3-0.6B",
         trained_model_path="./dc_circuit_model_rl",
-        samples_per_difficulty=20 
+        samples_per_difficulty=20
     )
     
     results = evaluator.run_evaluation()

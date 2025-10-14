@@ -6,6 +6,7 @@ import sys
 import torch
 import json
 import datetime
+import re
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,7 +74,8 @@ class DCCircuitRLTrainer:
     
     # Константы
     REWARD_SCALE_FACTOR = 2.0
-    FORMAT_BONUS = 0.5  # Бонус за правильный формат ответа
+    FORMAT_BONUS = 0.2  # Бонус за правильный формат ответа
+    STRICT_FORMAT_BONUS = 0.5  # Бонус за строгий формат <answer>X.XXX</answer>
     RANDOM_STATE = 3407
 
     def __init__(self, config: TrainingConfig = None, circuit_config: CircuitConfig = None, verifier_config: VerifierConfig = None):
@@ -218,14 +220,28 @@ class DCCircuitRLTrainer:
                 
                 # Бонус за правильный формат
                 format_bonus = 0.0
+                strict_format_bonus = 0.0
                 has_think_tag = "<think>" in completion_str_for_verifier
                 has_answer_tag = "<answer>" in completion_str_for_verifier
+                
+                # Строгая проверка: внутри <answer> ровно число с 3 знаками после точки
+                strict_format_ok = False
+                try:
+                    answer_tags = re.findall(r"<answer>([\s\S]*?)</answer>", completion_str_for_verifier, flags=re.IGNORECASE)
+                    if answer_tags:
+                        last_answer = answer_tags[-1].strip()
+                        strict_format_ok = bool(re.fullmatch(r"[-+]?\d+\.\d{3}", last_answer))
+                except Exception:
+                    strict_format_ok = False
                 
                 if has_think_tag and has_answer_tag:
                     format_bonus = self.FORMAT_BONUS
                     print(f"🎯 Бонус за формат: +{format_bonus:.1f}")
+                if strict_format_ok:
+                    strict_format_bonus = self.STRICT_FORMAT_BONUS
+                    print(f"🔒 Бонус за строгий формат: +{strict_format_bonus:.1f}")
                 
-                reward = base_reward + format_bonus
+                reward = base_reward + format_bonus + strict_format_bonus
                 print(f"✅ Accuracy: {accuracy_score:.3f}, base_reward: {base_reward:.3f}, total_reward: {reward:.3f}")
             
             self.log_llm_interaction(
@@ -237,11 +253,13 @@ class DCCircuitRLTrainer:
                     "accuracy_score": accuracy_score if correct_answer else None,
                     "base_reward": base_reward if correct_answer else 0.0,
                     "format_bonus": format_bonus,
+                        "strict_format_bonus": strict_format_bonus,
                     "total_reward": reward,
                     "batch_idx": idx,
                     "completion_has_think": has_think_tag,
                     "completion_has_answer": has_answer_tag,
-                    "has_correct_format": has_think_tag and has_answer_tag
+                        "has_correct_format": has_think_tag and has_answer_tag,
+                        "has_strict_answer_format": strict_format_ok
                 }
             )
             

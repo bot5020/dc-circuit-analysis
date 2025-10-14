@@ -32,7 +32,13 @@ def extract_answer(test_solution: str) -> str:
     text = test_solution.strip()
 
     # 1. Ищем число в <answer> тегах (основной формат)
+    # Сначала ищем простые числа
     tag_match = re.search(r'<answer>\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*</answer>', text)
+    if tag_match:
+        return tag_match.group(1)
+    
+    # Если не найдено, ищем сложные выражения в <answer> тегах
+    tag_match = re.search(r'<answer>\s*.*?([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*</answer>', text, re.DOTALL)
     if tag_match:
         return tag_match.group(1)
 
@@ -78,9 +84,10 @@ def get_system_prompt() -> str:
         
         "APPROACH:\n"
         "1. Identify circuit topology (series or parallel)\n"
-        "2. Apply Ohm's Law and series/parallel rules\n"
-        "3. Solve for the requested quantity step by step\n"
-        "4. Verify your answer makes physical sense\n\n"
+        "2. For SERIES: Find total resistance, then current, then individual voltages\n"
+        "3. For PARALLEL: Use source voltage directly for individual currents\n"
+        "4. Apply Ohm's Law: V = I × R, I = V/R, R = V/I\n"
+        "5. Verify your answer makes physical sense\n\n"
         
         "CIRCUIT TYPES:\n"
         "• Series: Current same, voltages add up\n"
@@ -93,7 +100,7 @@ def get_system_prompt() -> str:
         "</think>\n"
         "<answer>X.XXX</answer>\n\n"
         
-        "EXAMPLE 1 - Series Circuit:\n"
+        "EXAMPLE 1 - Series Circuit (Current):\n"
         "User: Find current through R1 in series circuit with V=12V, R1=4Ω, R2=8Ω\n"
         "Assistant: <think>\n"
         "Step 1: This is a series circuit\n"
@@ -102,6 +109,15 @@ def get_system_prompt() -> str:
         "Step 4: In series, current through R1 equals total current = 1.000A\n"
         "</think>\n"
         "<answer>1.000</answer>\n\n"
+        "EXAMPLE 1b - Series Circuit (Voltage):\n"
+        "User: Find voltage across R1 in series circuit with V=12V, R1=4Ω, R2=8Ω\n"
+        "Assistant: <think>\n"
+        "Step 1: This is a series circuit\n"
+        "Step 2: Total resistance R_total = R1 + R2 = 4Ω + 8Ω = 12Ω\n"
+        "Step 3: Current I = V/R_total = 12V/12Ω = 1.000A\n"
+        "Step 4: Voltage across R1: V_R1 = I × R1 = 1.000A × 4Ω = 4.000V\n"
+        "</think>\n"
+        "<answer>4.000</answer>\n\n"
         
         "EXAMPLE 2 - Parallel Circuit:\n"
         "User: Find voltage across R1 in parallel circuit with V=9V, R1=3Ω, R2=6Ω\n"
