@@ -9,7 +9,7 @@ class TrainingConfig:
     """Конфигурация для GRPO обучения модели."""
     
     # Модель
-    model_name: str = "unsloth/Qwen2.5-1.5B-instruct" 
+    model_name: str = "unsloth/Qwen2.5-0.5B" 
     output_dir: str = "./dc_circuit_model_rl"
     
     # Формат модели
@@ -27,7 +27,7 @@ class TrainingConfig:
     learning_rate: float = 2e-5  # Уменьшен с 5e-5 для более стабильного обучения
     max_steps: int = 50  # Уменьшено с 100 для предотвращения переобучения
     save_steps: int = 25  # Соответственно уменьшено
-    batch_size: int = 16
+    batch_size: int = 4
     gradient_accumulation_steps: int = 1  
     max_prompt_length: int = 4096
     # Оптимизатор - усиленная регуляризация
@@ -37,13 +37,13 @@ class TrainingConfig:
     warmup_ratio: float = 0.2  
     max_grad_norm: float = 0.1
     
-    # Генерация - уменьшено для предотвращения ошибок памяти
+    # Генерация
     max_seq_length: int = 11000
     max_completion_length: int = 11000
-    num_generations: int = 8
-    temperature: float = 0.6
+    num_generations: int = 4
+    temperature: float = 0.7
     top_p: float = 0.95
-    repetition_penalty: float = 1.15
+    repetition_penalty: float = 1.1
     do_sample: bool = False
     gpu_memory_utilization: float = 0.35 
 
