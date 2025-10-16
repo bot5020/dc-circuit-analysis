@@ -29,7 +29,7 @@ class TrainingConfig:
     save_steps: int = 25  # Соответственно уменьшено
     batch_size: int = 16
     gradient_accumulation_steps: int = 1  
-    max_prompt_length: int = 4096
+    max_prompt_length: int = 3000
     # Оптимизатор - усиленная регуляризация
     adam_beta1: float = 0.9
     adam_beta2: float = 0.99
@@ -37,9 +37,9 @@ class TrainingConfig:
     warmup_ratio: float = 0.2  
     max_grad_norm: float = 0.1
     
-    # Генерация
-    max_seq_length: int = 11000
-    max_completion_length: int = 11000
+    # Генерация - уменьшено для предотвращения ошибок памяти
+    max_seq_length: int = 8000
+    max_completion_length: int = 8000
     num_generations: int = 4
     temperature: float = 0.7
     top_p: float = 0.95
