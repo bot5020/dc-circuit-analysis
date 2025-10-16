@@ -38,9 +38,9 @@ class TrainingConfig:
     max_grad_norm: float = 0.1
     
     # Генерация - синхронизировано с моделью Qwen2.5-1.5B-instruct (max 8192)
-    max_seq_length: int = 8192
+    max_seq_length: int = 11000
     max_completion_length: int = 4096
-    num_generations: int = 8
+    num_generations: int = 4
     temperature: float = 0.6
     top_p: float = 0.95
     repetition_penalty: float = 1.15
