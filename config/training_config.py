@@ -9,7 +9,7 @@ class TrainingConfig:
     """Конфигурация для GRPO обучения модели."""
     
     # Модель
-    model_name: str = "unsloth/Qwen2.5-1.5B-instruct" 
+    model_name: str = "unsloth/Qwen2.5-0.5B" 
     output_dir: str = "./dc_circuit_model_rl"
     
     # Формат модели
@@ -17,24 +17,24 @@ class TrainingConfig:
     dtype: str = "bfloat16"  # "bfloat16" или "float16"
     use_flash_attention: bool = True  # Flash Attention 2
     
-    # LoRA параметры
+    # LoRA параметры - усиленная регуляризация
     lora_r: int = 64
     lora_alpha: int = 64
-    lora_dropout: float = 0.1
+    lora_dropout: float = 0.2  # Увеличено с 0.1 для предотвращения переобучения
     lora_target_modules: List[str] = None
     
-    # Обучение
-    learning_rate: float = 5e-5
-    max_steps: int = 100 
-    save_steps: int = 50 
+    # Обучение - настройки против переобучения
+    learning_rate: float = 2e-5  # Уменьшен с 5e-5 для более стабильного обучения
+    max_steps: int = 50  # Уменьшено с 100 для предотвращения переобучения
+    save_steps: int = 25  # Соответственно уменьшено
     batch_size: int = 16
     gradient_accumulation_steps: int = 1  
     max_prompt_length: int = 4096
-    # Оптимизатор
+    # Оптимизатор - усиленная регуляризация
     adam_beta1: float = 0.9
     adam_beta2: float = 0.99
-    weight_decay: float = 0.1
-    warmup_ratio: float = 0.1
+    weight_decay: float = 0.2 
+    warmup_ratio: float = 0.2  
     max_grad_norm: float = 0.1
     
     # Генерация
@@ -54,7 +54,7 @@ class TrainingConfig:
 
     def __post_init__(self):
         if self.difficulties is None:
-            self.difficulties = [1, 2, 3, 4, 5, 6]
+            self.difficulties = [1, 2, 5, 6]
         
         if self.lora_target_modules is None:
             self.lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]

@@ -1,21 +1,12 @@
-"""Cкрипт оценки моделей для DC Circuit Analysis.
-
-Тестирует подходы и строит графики как в MLX-версии:
-- Группировка по типам цепей (series/parallel)
-- Подсчет accuracy по `accuracy_score` без округления
-- Две метрики формата: формат (требует <think> + <answer> + строгий X.XXX) и строгий формат
-- Сохранение PNG диаграмм в папку `results`
-"""
-
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import List, Dict
 import re
-import torch
-from unsloth import FastLanguageModel
-from vllm import LLM, SamplingParams
+import mlx.core as mx
+import mlx.nn as nn
+from mlx_lm import load, generate
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -24,37 +15,37 @@ from dc_circuit.game import DCCircuitGame
 from config import CircuitConfig, VerifierConfig, TrainingConfig
 from base.utils import get_system_prompt
 
-# Папка для результатов (совместимо с MLX-версией)
+# Глобальная переменная для папки результатов
 results_dir = "results"
 
 
 
 class Evaluator:
-    """Оценщик для тестирования моделей."""
+    """Оценщик для тестирования моделей (MLX версия)."""
 
-    
+
     def __init__(
         self,
-        baseline_model: str = "unsloth/Qwen2.5-1.5B-instruct",
+        baseline_model: str = "unsloth/Qwen2.5-1.5B-instruct",  # Можно использовать любую HF модель!
         trained_model_path: str = "./dc_circuit_model_rl",
         samples_per_difficulty: int = 5
     ):
         """Инициализация оценщика.
-        
+
         Args:
-            baseline_model: Название базовой модели
+            baseline_model: Название любой HF модели (mlx-lm конвертирует автоматически)
             trained_model_path: Путь к обученной модели
             samples_per_difficulty: Количество задач на уровень сложности
         """
         self.baseline_model_name = baseline_model
         self.trained_model_path = trained_model_path
         self.samples_per_difficulty = samples_per_difficulty
-        
+
         # Конфигурации
         self.circuit_config = CircuitConfig()
         self.verifier_config = VerifierConfig()
         self.training_config = TrainingConfig()
-        
+
         # Game для генерации и верификации
         self.game = DCCircuitGame(self.circuit_config, self.verifier_config)
 
@@ -75,17 +66,16 @@ class Evaluator:
         content = tag_matches[-1].strip()
         # Должно быть строго число с 3 десятичными, без единиц и текста
         return bool(re.fullmatch(r"[-+]?\d+\.\d{3}", content))
-        
+
     def generate_test_data(self) -> Dict[int, List[Data]]:
         """Генерирует тестовые данные для всех уровней сложности.
-        
+
         Returns:
             Словарь {difficulty: list_of_data}
         """
         print("\n📝 Генерация тестовых данных...")
         test_data = {}
-        
-        # Синхронизация со списком сложностей в MLX-версии
+
         for difficulty in [1, 2, 5, 6]:
             print(f"  Сложность {difficulty}: генерация {self.samples_per_difficulty} задач...")
             data_list = self.game.generate(
@@ -94,70 +84,50 @@ class Evaluator:
             )
             test_data[difficulty] = data_list
             print(f"    ✓ Сгенерировано {len(data_list)} задач")
-        
+
         total = sum(len(data) for data in test_data.values())
         print(f"  Всего тестовых задач: {total}\n")
-        
+
         return test_data
-    
+
     def load_model(self, model_path: str, is_trained: bool = False):
-        """Загружает модель через vLLM или unsloth.
+        """Загружает модель через MLX или transformers (для совместимости с LoRA).
 
         Args:
-            model_path: Путь к модели или Hugging Face ID
+            model_path: Путь к модели или Hugging Face ID (любая HF модель)
             is_trained: True если это обученная модель с LoRA
 
         Returns:
-            (model, tokenizer_or_params, use_vllm) - vLLM или transformers
+            (model, tokenizer) - модель и токенизатор
         """
-        import os
-
         # Определяем тип модели: Hugging Face или локальная
         is_huggingface = "/" in model_path and not model_path.startswith("./") and not model_path.startswith("../") and not model_path.startswith("/")
 
         if is_huggingface:
-            # Hugging Face модель - используем vLLM для скорости
+            # Hugging Face модель - используем MLX
+            print(f"🚀 Загрузка HF модели через MLX: {model_path}")
             try:
-                from vllm import LLM, SamplingParams
-
-                print(f"📥 Загрузка Hugging Face модели через vLLM: {model_path}")
-                llm = LLM(
-                    model=model_path,
-                    max_model_len=self.training_config.max_seq_length,
-                    dtype='bfloat16',
-                    gpu_memory_utilization=0.6,
-                    trust_remote_code=True,
-                    enforce_eager=False
-                )
-
-                sampling_params = SamplingParams(
-                    temperature=0.7,
-                    max_tokens=self.training_config.max_completion_length,
-                    stop=["<|im_end|>", "</s>"]
-                )
-
-                print("  ✓ Модель загружена через vLLM\n")
-                return llm, sampling_params, True
-
+                model, tokenizer = load(model_path)
+                print("  ✓ Модель загружена через MLX\n")
             except Exception as e:
-                print(f"⚠️  vLLM не доступен ({e}), используем unsloth")
-                # Fallback на unsloth
-                from unsloth import FastLanguageModel
-
-                model, tokenizer = FastLanguageModel.from_pretrained(
-                    model_name=model_path,
-                    max_seq_length=self.training_config.max_seq_length,
-                    load_in_4bit=False,  # Экономим память
-                    dtype=None,
-                    device_map="auto"
+                print(f"⚠️  MLX не доступен ({e}), используем transformers")
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    torch_dtype="auto",
+                    device_map="auto",
+                    trust_remote_code=True
                 )
-                print("  ✓ Модель загружена через unsloth\n")
-                return model, tokenizer, False
-
+                tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+                print("  ✓ Модель загружена через transformers\n")
         else:
-            # Локальная модель - используем transformers (более стабильный)
+            # Локальная модель (LoRA) - используем transformers для совместимости
+            print(f"📦 Загрузка локальной LoRA модели через transformers: {model_path}")
+
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+
+            # Проверяем существование пути
             if not os.path.exists(model_path):
-                # Если путь не существует, пробуем найти в стандартных местах
                 possible_paths = [
                     model_path,
                     f"./{model_path}",
@@ -165,35 +135,46 @@ class Evaluator:
                     os.path.join(os.getcwd(), model_path),
                     os.path.join(os.path.dirname(os.getcwd()), model_path)
                 ]
-
                 for path in possible_paths:
                     if os.path.exists(path):
                         model_path = path
-                        print(f"✅ Найден путь к модели: {model_path}")
                         break
                 else:
                     raise FileNotFoundError(f"Модель не найдена по путям: {possible_paths}")
 
-            # Загружаем локальную модель через transformers
-            from transformers import AutoModelForCausalLM, AutoTokenizer
+            # Загружаем базовую модель + LoRA адаптер
+            try:
+                # Определяем базовую модель из адаптера
+                import json
+                with open(os.path.join(model_path, "adapter_config.json"), "r") as f:
+                    adapter_config = json.load(f)
+                base_model_name = adapter_config.get("base_model_name_or_path", "unsloth/Qwen2.5-1.5B-instruct")
 
-            print(f"📥 Загрузка локальной модели через transformers: {model_path}")
-            model = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                torch_dtype="auto",
-                device_map="auto",
-                trust_remote_code=True
-            )
-            tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-            print("  ✓ Модель загружена через transformers\n")
+                print(f"  Базовая модель: {base_model_name}")
+                print(f"  LoRA адаптер: {model_path}")
 
-            # Устанавливаем pad_token если нужно
-            if tokenizer.pad_token is None:
-                tokenizer.pad_token = tokenizer.eos_token
+                # Загружаем базовую модель
+                model = AutoModelForCausalLM.from_pretrained(
+                    base_model_name,
+                    torch_dtype="auto",
+                    device_map="auto",
+                    trust_remote_code=True
+                )
 
-            # Устанавливаем chat template для Qwen (если его нет)
-            if tokenizer.chat_template is None:
-                tokenizer.chat_template = """{% for message in messages %}
+                # Загружаем LoRA адаптер
+                from peft import PeftModel
+                model = PeftModel.from_pretrained(model, model_path)
+
+                tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True)
+                print("  ✓ LoRA модель загружена через transformers\n")
+
+            except Exception as e:
+                print(f"❌ Ошибка загрузки LoRA модели: {e}")
+                raise
+
+        # Устанавливаем chat template для Qwen (если его нет)
+        if tokenizer.chat_template is None:
+            tokenizer.chat_template = """{% for message in messages %}
 {% if message['role'] == 'system' %}
 <|im_start|>system
 {{ message['content'] }}<|im_end|>
@@ -206,24 +187,22 @@ class Evaluator:
 {% endif %}
 {% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"""
 
-            return model, tokenizer, False
-    
+        return model, tokenizer
+
     def generate_answer(
         self,
         model,
-        generation_params,
+        tokenizer,
         question: str,
-        use_system_prompt: bool = True,
-        use_vllm: bool = True
+        use_mlx: bool = True
     ) -> str:
-        """Генерирует ответ модели на вопрос через vLLM или transformers.
+        """Генерирует ответ модели через MLX или transformers.
 
         Args:
-            model: Модель (vLLM или transformers)
-            generation_params: Параметры генерации (sampling_params для vLLM или tokenizer для transformers)
+            model: Модель (MLX или transformers)
+            tokenizer: Токенизатор
             question: Вопрос
-            use_system_prompt: Использовать ли системный промпт
-            use_vllm: True для vLLM, False для transformers
+            use_mlx: True для MLX генерации, False для transformers
 
         Returns:
             Ответ модели
@@ -231,16 +210,13 @@ class Evaluator:
         # Формируем промпт
         messages = []
 
-        # Добавляем системный промпт
-        if use_system_prompt:
-            messages.append({"role": "system", "content": get_system_prompt()})
-        else:
-            messages.append({"role": "system", "content": "You are a helpful assistant."})
+        # Всегда добавляем системный промпт RL среды
+        messages.append({"role": "system", "content": get_system_prompt()})
 
-        # Добавляем основной вопрос
+        # Добавляем основной вопрос (уже содержит описание цепи из среды)
         messages.append({"role": "user", "content": question})
 
-        # Формируем промпт для vLLM из messages
+        # Формируем промпт для MLX
         prompt_parts = []
         for message in messages:
             if message["role"] == "system":
@@ -253,144 +229,140 @@ class Evaluator:
         # Добавляем начало ответа для текущего вопроса
         prompt_parts.append("<|im_start|>assistant\n")
         prompt = "\n".join(prompt_parts)
-        
+
         # 🔍 ОТЛАДОЧНЫЙ ВЫВОД ГЕНЕРАЦИИ
         print(f"\n🔧 ОТЛАДКА ГЕНЕРАЦИИ:")
         print(f"📝 ПРОМПТ (первые 200 символов): {prompt[:200]}...")
-        
-        if use_vllm:
-            # Генерируем ответ через vLLM
-            outputs = model.generate([prompt], generation_params)
-            response = outputs[0].outputs[0].text
+
+        if use_mlx:
+            # Генерируем ответ через MLX
+            response = generate(
+                model,
+                tokenizer,
+                prompt=prompt,
+                max_tokens=self.training_config.max_completion_length,
+                verbose=False
+            )
         else:
-            # Генерируем ответ через transformers
+            # Генерируем ответ через transformers (для LoRA моделей)
             import torch
+            inputs = tokenizer(prompt, return_tensors="pt")
 
-            tokenizer = generation_params  # generation_params это tokenizer для transformers
+            # Перемещаем на устройство модели
+            if hasattr(model, 'device'):
+                inputs = inputs.to(model.device)
 
-            # Токенизируем промпт
-            inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-            # Генерируем
             with torch.no_grad():
                 outputs = model.generate(
                     **inputs,
                     max_new_tokens=self.training_config.max_completion_length,
-                    temperature=0.7,
                     do_sample=True,
                     pad_token_id=tokenizer.pad_token_id,
                     eos_token_id=tokenizer.eos_token_id
                 )
 
-            # Декодируем ответ
             response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
-        
+
         print(f"🤖 ПОЛНЫЙ ОТВЕТ МОДЕЛИ:")
         print(f"{response}")
         print(f"📏 Длина ответа: {len(response)} символов")
-        
-        # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если модель генерирует весь системный промпт,
-        # извлекаем только часть после "assistant"
-        if "assistant" in response and len(response) > 1000:
-            # Ищем последний "assistant" в ответе
-            assistant_parts = response.split("assistant")
-            if len(assistant_parts) > 1:
-                # Берем только часть после последнего "assistant"
-                response = assistant_parts[-1].strip()
-                print(f"🔧 ИСПРАВЛЕНИЕ: Извлечен только ответ ассистента")
-                print(f"✂️ ФИНАЛЬНЫЙ ОТВЕТ:")
-                print(f"{response}")
-        
+
+
         return response
-    
+
     def evaluate_model_on_data(
         self,
         model,
-        generation_params,
+        tokenizer,
         test_data: Dict[int, List[Data]],
         method_name: str,
-        use_system_prompt: bool = True,
-        use_vllm: bool = True
-    ) -> Dict[str, Dict[int, Dict[str, float]]]:
+        use_mlx: bool = True
+    ) -> Dict[int, Dict[str, float]]:
         """Оценивает модель на тестовых данных.
 
         Args:
-            model: Модель (vLLM или transformers)
-            generation_params: Параметры генерации
+            model: Модель (MLX или transformers)
+            tokenizer: Токенизатор
             test_data: Тестовые данные
             method_name: Название метода для вывода
-            use_system_prompt: Использовать ли системный промпт
-            use_vllm: True для vLLM, False для transformers
+            use_mlx: True для MLX генерации, False для transformers
 
         Returns:
             Словарь {difficulty: {"accuracy": float, "format_score": float, "strict_format_score": float}}
         """
         print(f"🧪 Тестирование: {method_name}")
-        
+
         # 🔍 ОТЛАДОЧНЫЙ ВЫВОД СИСТЕМНОГО ПРОМПТА
-        if use_system_prompt:
-            from base.utils import get_system_prompt
-            system_prompt = get_system_prompt()
-            print(f"\n📋 СИСТЕМНЫЙ ПРОМПТ:")
-            print("=" * 80)
-            print(f"{system_prompt}")
-            print("=" * 80)
-        else:
-            print(f"\n📋 РЕЖИМ: Zero-shot (без системного промпта)")
-        
-        # Готовим структуру результатов по типам цепей как в MLX-версии
-        circuit_type_results: Dict[str, Dict[int, Dict[str, float]]] = {"series": {}, "parallel": {}}
+        from base.utils import get_system_prompt
+        system_prompt = get_system_prompt()
+        print(f"\n📋 СИСТЕМНЫЙ ПРОМПТ RL СРЕДЫ:")
+        print("=" * 80)
+        print(f"{system_prompt}")
+        print("=" * 80)
+
+        # Группируем задачи по типам цепей
+        circuit_type_results = {"series": {}, "parallel": {}}
+
+        results = {}
 
         for difficulty, data_list in sorted(test_data.items()):
-            # Аккумуляторы по типам
-            series_correct_sum = 0.0
+            # Группируем по типам цепей
+            series_correct = 0
             series_format_correct = 0
             series_strict_format_correct = 0
             series_total = 0
 
-            parallel_correct_sum = 0.0
+            parallel_correct = 0
             parallel_format_correct = 0
             parallel_strict_format_correct = 0
             parallel_total = 0
 
             for i, data in enumerate(data_list):
+                # Получаем тип цепи из метаданных
+                circuit_type = getattr(data, 'metadata', {}).get('circuit_type', 'unknown')
+                question_type = getattr(data, 'metadata', {}).get('question_type', 'unknown')
+                # Генерируем ответ
                 response = self.generate_answer(
-                    model, generation_params, data.question, use_system_prompt, use_vllm
+                    model, tokenizer, data.question, use_mlx
                 )
 
+    
                 print("=" * 80)
                 print(f"📋 ПОЛНАЯ ЗАДАЧА:")
                 print(f"{data.question}")
-                print(f"\n✅ ОЖИДАЕМЫЙ ОТВЕТ: {getattr(data, 'answer', '')}")
+                print(f"\n✅ ОЖИДАЕМЫЙ ОТВЕТ: {data.answer}")
                 print(f"\n🤖 ОТВЕТ МОДЕЛИ:")
                 print(f"{response}")
 
+                # Извлекаем ответ из ответа модели
                 from base.utils import extract_answer
                 extracted_answer = extract_answer(response)
                 print(f"\n🔍 ИЗВЛЕЧЕННЫЙ ОТВЕТ: '{extracted_answer}'")
 
+                # Проверяем правильность
                 accuracy_score = self.game.verifier.get_accuracy_score(data, response)
                 print(f"\n📊 РЕЗУЛЬТАТ ВЕРИФИКАЦИИ:")
+
                 print(f"  Accuracy Score: {accuracy_score:.3f}")
 
+                # Исправлено: переменные has_think, has_answer, strict_format_ok должны быть определены
                 has_think = "<think>" in response.lower()
                 has_answer = "<answer>" in response.lower()
                 strict_format_ok = self._has_strict_answer_format(response)
 
-                # Тип цепи из метаданных генератора
-                circuit_type = getattr(data, 'metadata', {}).get('circuit_type', 'unknown')
-
+                # Суммируем accuracy score по типам цепей
                 if circuit_type == "series":
-                    series_correct_sum += accuracy_score
+                    series_correct += accuracy_score
                     series_total += 1
-                    # В MLX-версии формат_ok требует и теги, и строгий формат
+                    # Теперь format_ok учитывает и теги И строгий формат
                     if has_think and has_answer and strict_format_ok:
                         series_format_correct += 1
                     if strict_format_ok:
                         series_strict_format_correct += 1
                 elif circuit_type == "parallel":
-                    parallel_correct_sum += accuracy_score
+                    parallel_correct += accuracy_score
                     parallel_total += 1
+                    # Теперь format_ok учитывает и теги И строгий формат
                     if has_think and has_answer and strict_format_ok:
                         parallel_format_correct += 1
                     if strict_format_ok:
@@ -398,110 +370,116 @@ class Evaluator:
 
                 print("=" * 80)
 
+                # Прогресс
                 if (i + 1) % 5 == 0 or (i + 1) == len(data_list):
                     print(f"  Сложность {difficulty}: {i+1}/{len(data_list)} задач...", end='\r')
 
-            # Итоги по сложности и типам
+            # Сохраняем результаты для каждого типа цепи
             if series_total > 0:
-                series_accuracy = series_correct_sum / series_total
+                series_accuracy = round(series_correct) / series_total
                 series_format_score = series_format_correct / series_total
                 series_strict_format_score = series_strict_format_correct / series_total
                 circuit_type_results["series"][difficulty] = {
                     "accuracy": series_accuracy,
                     "format_score": series_format_score,
                     "strict_format_score": series_strict_format_score,
-                    "total_tasks": series_total,
+                    "total_tasks": series_total
                 }
-                print(f"  Сложность {difficulty} (Series): {series_correct_sum:.3f}/{series_total} = {series_accuracy:.1%} | Формат (строгий): {series_format_correct}/{series_total} = {series_format_score:.1%}")
+                print(f"  Сложность {difficulty} (Series): {round(series_correct)}/{series_total} = {series_accuracy:.1%} | Формат (строгий): {series_format_correct}/{series_total} = {series_format_score:.1%}")
 
             if parallel_total > 0:
-                parallel_accuracy = parallel_correct_sum / parallel_total
+                parallel_accuracy = round(parallel_correct) / parallel_total
                 parallel_format_score = parallel_format_correct / parallel_total
                 parallel_strict_format_score = parallel_strict_format_correct / parallel_total
                 circuit_type_results["parallel"][difficulty] = {
                     "accuracy": parallel_accuracy,
                     "format_score": parallel_format_score,
                     "strict_format_score": parallel_strict_format_score,
-                    "total_tasks": parallel_total,
+                    "total_tasks": parallel_total
                 }
-                print(f"  Сложность {difficulty} (Parallel): {parallel_correct_sum:.3f}/{parallel_total} = {parallel_accuracy:.1%} | Формат (строгий): {parallel_format_correct}/{parallel_total} = {parallel_format_score:.1%}")
+                print(f"  Сложность {difficulty} (Parallel): {round(parallel_correct)}/{parallel_total} = {parallel_accuracy:.1%} | Формат (строгий): {parallel_format_correct}/{parallel_total} = {parallel_format_score:.1%}")
 
+        # Возвращаем результаты по типам цепей
         return circuit_type_results
-    
+
     def run_evaluation(self):
         """Запускает полную оценку всех трех методов."""
         print("================================================")
-        print("                ОЦЕНКА МОДЕЛЕЙ DC CIRCUIT ANALYSIS")
+        print("                ОЦЕНКА МОДЕЛЕЙ DC CIRCUIT ANALYSIS (MLX)")
         print("================================================")
-        
+
         # 🔍 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ
         print(f"\n🔧 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ:")
         print(f"📊 Образцов на сложность: {self.samples_per_difficulty}")
         print(f"🎯 Сложности: {self.circuit_config.difficulties}")
         print(f"📏 Максимальная длина ответа: {self.training_config.max_completion_length}")
         print("=" * 80)
-        
+
         # 1. Генерация тестовых данных
         test_data = self.generate_test_data()
-        
+
         # 2. Загрузка baseline модели
-        baseline_model, baseline_params, baseline_use_vllm = self.load_model(
+        baseline_model, baseline_tokenizer = self.load_model(
             self.baseline_model_name,
             is_trained=False
         )
-        
+
         # 3. Baseline Model оценка (с системным промптом RL среды)
         print("-"*70)
         baseline_results = self.evaluate_model_on_data(
             baseline_model,
-            baseline_params,
+            baseline_tokenizer,
             test_data,
-            "Baseline Model (with system prompt)",
-            use_system_prompt=True,
-            use_vllm=baseline_use_vllm
+            "Baseline Model (with RL system prompt)",
+            use_mlx=True  # HF модель через MLX
         )
 
         # Очистка памяти
-        del baseline_model, baseline_params
+        del baseline_model, baseline_tokenizer
 
         # 5. GRPO Trained оценка (если модель существует)
         print("-"*70)
         grpo_results = {"series": {}, "parallel": {}}
         if os.path.exists(self.trained_model_path):
-            trained_model, trained_params, trained_use_vllm = self.load_model(
+            trained_model, trained_tokenizer = self.load_model(
                 self.trained_model_path,
                 is_trained=True
             )
 
             grpo_results = self.evaluate_model_on_data(
                 trained_model,
-                trained_params,
+                trained_tokenizer,
                 test_data,
                 "GRPO Trained (with LoRA)",
-                use_system_prompt=True,
-                use_vllm=trained_use_vllm
+                use_mlx=False  # LoRA модель через transformers
             )
 
-            del trained_model, trained_params
+            del trained_model, trained_tokenizer
         else:
             print(f"⚠️  Обученная модель не найдена: {self.trained_model_path}")
             print(f"   Пропускаем оценку GRPO Trained\n")
+            # Создаем пустые результаты для отсутствующей модели
             grpo_results = {"series": {}, "parallel": {}}
-        
-        # 6. Вывод итоговых результатов по типам цепей и построение графиков
+
+        # 6. Вывод итоговых результатов по типам цепей
         self.print_summary(baseline_results, grpo_results)
 
         return {
             "baseline_model": baseline_results,
             "grpo_trained": grpo_results
         }
-    
+
     def print_summary(
         self,
         baseline: Dict[str, Dict[int, Dict[str, float]]],
         grpo: Dict[str, Dict[int, Dict[str, float]]]
     ):
-        """Выводит итоговую таблицу результатов по типам цепей и строит диаграммы PNG."""
+        """Выводит итоговую таблицу результатов по типам цепей с красивой диаграммой.
+
+        Args:
+            baseline: Результаты Baseline Model по типам цепей
+            grpo: Результаты GRPO Trained по типам цепей
+        """
         print("="*80)
         print(" 📊 ИТОГОВЫЕ РЕЗУЛЬТАТЫ ПО ТИПАМ ЦЕПЕЙ")
         print("="*80)
@@ -514,6 +492,7 @@ class Evaluator:
             print(f"🔌 ТИП ЦЕПИ: {circuit_type.upper()}")
             print("-" * 60)
 
+            # Получаем все сложности для этого типа цепи
             all_difficulties = set()
             if circuit_type in baseline:
                 all_difficulties.update(baseline[circuit_type].keys())
@@ -531,6 +510,7 @@ class Evaluator:
             print(header)
             print(separator)
 
+            # Baseline Model
             if circuit_type in baseline:
                 baseline_values = [baseline[circuit_type].get(d, {}).get('accuracy', 0.0) for d in difficulties]
                 avg_baseline_acc = sum(baseline_values) / len(baseline_values) if baseline_values else 0.0
@@ -538,6 +518,7 @@ class Evaluator:
             else:
                 print(f"| Baseline Model         |" + "".join("       0.0% |" for _ in difficulties) + "    0.0% |")
 
+            # GRPO Trained
             if circuit_type in grpo:
                 grpo_values = [grpo[circuit_type].get(d, {}).get('accuracy', 0.0) for d in difficulties]
                 avg_grpo_acc = sum(grpo_values) / len(grpo_values) if grpo_values else 0.0
@@ -556,15 +537,12 @@ class Evaluator:
             print("-" * 60)
             print()
 
-        # Построение диаграмм PNG
+        # Создаем диаграммы
         self.print_visual_chart(baseline, grpo)
 
     def print_visual_chart(self, baseline, grpo):
-        """Создает matplotlib диаграммы по типам цепей и общие метрики."""
-        # Убедимся, что папка результатов существует
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
-
+        """Создает красивые matplotlib диаграммы по типам цепей."""
+        # Создаем диаграммы для каждого типа цепи отдельно
         for circuit_type in ["series", "parallel"]:
             baseline_circuit = baseline.get(circuit_type, {})
             grpo_circuit = grpo.get(circuit_type, {})
@@ -572,19 +550,29 @@ class Evaluator:
             if not baseline_circuit and not grpo_circuit:
                 continue
 
+            # Получаем сложности для этого типа цепи
             all_difficulties = set(list(baseline_circuit.keys()) + list(grpo_circuit.keys()))
             difficulties = sorted(all_difficulties)
+
             if not difficulties:
                 continue
 
+            # Подготавливаем данные для диаграммы
             methods = ["Baseline Model", "GRPO Trained"]
             accuracy_data = {
                 'Baseline Model': [baseline_circuit.get(d, {}).get('accuracy', 0.0) * 100 for d in difficulties],
                 'GRPO Trained': [grpo_circuit.get(d, {}).get('accuracy', 0.0) * 100 for d in difficulties]
             }
 
+            format_data = {
+                'Baseline Model': [baseline_circuit.get(d, {}).get('format_score', 0.0) * 100 for d in difficulties],
+                'GRPO Trained': [grpo_circuit.get(d, {}).get('format_score', 0.0) * 100 for d in difficulties]
+            }
+
+            # Создаем диаграммы для этого типа цепи
             colors = ['#FF6B6B', '#4ECDC4']
 
+            # Диаграмма: Точность по сложностям для типа цепи
             plt.figure(figsize=(12, 8))
             x = np.arange(len(difficulties))
             width = 0.35
@@ -595,7 +583,7 @@ class Evaluator:
                 plt.bar_label(bars, fmt='%.1f%%', padding=3, fontsize=10)
 
             plt.ylabel('Accuracy (%)', fontsize=12)
-            plt.title(f'DC Circuit Analysis - {circuit_type.title()} Circuits - Accuracy by Difficulty', fontsize=14, fontweight='bold')
+            plt.title(f'DC Circuit Analysis - {circuit_type.title()} Circuits - Accuracy by Difficulty (MLX)', fontsize=14, fontweight='bold')
             plt.xticks(x + width/2, [f'Difficulty {d}' for d in difficulties])
             plt.legend(loc='upper left')
             plt.ylim(0, 100)
@@ -605,35 +593,69 @@ class Evaluator:
             print(f"📊 Диаграмма {circuit_type} точность сохранена в {results_dir}/{circuit_type}_accuracy_by_difficulty.png")
             plt.close()
 
-        # Общие средние по всем типам и сложностям
+
+        # Дополнительные графики: средние показатели
+
+        # График 3: Средняя точность по всем уровням сложности
         plt.figure(figsize=(10, 6))
         methods = ["Baseline Model", "GRPO Trained"]
 
+        # Собираем данные по всем типам цепей
         all_accuracy_data = {"Baseline Model": [], "GRPO Trained": []}
+        all_format_data = {"Baseline Model": [], "GRPO Trained": []}
+
         for circuit_type in ["series", "parallel"]:
             baseline_circuit = baseline.get(circuit_type, {})
             grpo_circuit = grpo.get(circuit_type, {})
+
+            # Получаем все сложности для этого типа цепи
             all_difficulties = set(list(baseline_circuit.keys()) + list(grpo_circuit.keys()))
             difficulties = sorted(all_difficulties)
+
             if difficulties:
+                # Добавляем данные точности
                 for method in methods:
-                    circuit_data = baseline_circuit if method == "Baseline Model" else grpo_circuit
+                    if method == "Baseline Model":
+                        circuit_data = baseline_circuit
+                    else:
+                        circuit_data = grpo_circuit
+
                     accuracy_values = [circuit_data.get(d, {}).get('accuracy', 0.0) * 100 for d in difficulties]
                     all_accuracy_data[method].extend(accuracy_values)
 
+                    format_values = [circuit_data.get(d, {}).get('format_score', 0.0) * 100 for d in difficulties]
+                    all_format_data[method].extend(format_values)
+
+        # Средняя точность
         avg_accuracy = [sum(all_accuracy_data[m]) / len(all_accuracy_data[m]) if all_accuracy_data[m] else 0 for m in methods]
-        colors = ['#FF6B6B', '#4ECDC4']
         bars = plt.bar(methods, avg_accuracy, color=colors, alpha=0.8)
         plt.bar_label(bars, fmt='%.1f%%', padding=3, fontsize=12)
+
         plt.ylabel('Average Accuracy (%)', fontsize=12)
-        plt.title('DC Circuit Analysis - Average Accuracy Across All Difficulties', fontsize=14, fontweight='bold')
+        plt.title('DC Circuit Analysis - Average Accuracy Across All Difficulties (MLX)', fontsize=14, fontweight='bold')
         plt.ylim(0, 100)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.savefig(f'{results_dir}/overall_average_accuracy.png', dpi=300, bbox_inches='tight')
         print(f"📊 График общей точности сохранен в {results_dir}/overall_average_accuracy.png")
         plt.close()
-    
+
+        # График 4: Средний формат (общий)
+        plt.figure(figsize=(10, 6))
+        avg_format = [sum(all_format_data[m]) / len(all_format_data[m]) if all_format_data[m] else 0 for m in methods]
+        bars = plt.bar(methods, avg_format, color=colors, alpha=0.8)
+        plt.bar_label(bars, fmt='%.1f%%', padding=3, fontsize=12)
+
+        plt.ylabel('Average Format Score (%)', fontsize=12)
+        plt.title('DC Circuit Analysis - Average Format Score Across All Tasks (MLX)', fontsize=14, fontweight='bold')
+        plt.ylim(0, 100)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f'{results_dir}/overall_average_format.png', dpi=300, bbox_inches='tight')
+        print(f"📊 График общего формата сохранен в {results_dir}/overall_average_format.png")
+        plt.close()
+
+        print(f"📊 Все диаграммы сохранены в папке {results_dir}/")
 
 
 def main():
@@ -644,15 +666,15 @@ def main():
 
     evaluator = Evaluator(
         baseline_model="unsloth/Qwen2.5-1.5B-instruct",
-        trained_model_path="./dc_circuit_model_rl",
+        trained_model_path="/Users/stepprog/Downloads/content 2/dc_circuit_model_rl",
         samples_per_difficulty=5
     )
-    
+
     results = evaluator.run_evaluation()
 
-    # Сохраняем результаты в файл в папку results
+    # Сохраняем результаты в файл
     import json
-    results_file = f"{results_dir}/evaluation_results.json"
+    results_file = f"{results_dir}/evaluation_results_mlx.json"
     with open(results_file, "w") as f:
         json.dump(results, f, indent=2)
     print(f"💾 Результаты сохранены в {results_file}")

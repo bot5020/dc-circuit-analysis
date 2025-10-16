@@ -46,8 +46,15 @@ class DCCircuitDataset(Dataset):
         all_data = []
 
         for difficulty in self.config.difficulties:
+            # Определяем количество задач в зависимости от типа цепи
+            # Для нечетных сложностей (series) - меньше задач для предотвращения переобучения
+            if difficulty % 2 == 1:  # series circuits (difficulties 1, 3, 5)
+                num_questions = max(5, self.config.samples_per_difficulty // 2)  # В 2 раза меньше
+            else:  # parallel circuits (difficulties 2, 4, 6)
+                num_questions = self.config.samples_per_difficulty
+            
             data_list = self.game.generate(
-                num_of_questions=self.config.samples_per_difficulty,
+                num_of_questions=num_questions,
                 difficulty=difficulty
             )
 
@@ -123,7 +130,7 @@ class DCCircuitRLTrainer:
             <|im_start|>assistant
             {{ message['content'] }}<|im_end|>
             {% endif %}
-            {% endfor %}"""
+            {% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"""
 
         # Устанавливаем pad_token если не установлен
         if self.tokenizer.pad_token is None:
@@ -305,7 +312,12 @@ class DCCircuitRLTrainer:
             # Сохранение модели GRPO
             self.trainer.save_model(self.config.output_dir)
             self.tokenizer.save_pretrained(self.config.output_dir)
-            
+
+            # Сохраняем LoRA адаптер
+            lora_adapter_path = f"{self.config.output_dir}/lora_adapter"
+            self.model.save_pretrained(lora_adapter_path)
+            print(f"✅ LoRA адаптер сохранен в {lora_adapter_path}")
+                
             # Сохраняем логи LLM
             self.save_llm_logs()
             print(f"✅ Логи LLM сохранены в {self.llm_log_file}")
