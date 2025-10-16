@@ -9,7 +9,7 @@ class TrainingConfig:
     """Конфигурация для GRPO обучения модели."""
     
     # Модель
-    model_name: str = "unsloth/Qwen2.5-0.5B" 
+    model_name: str = "unsloth/Qwen2.5-1.5B-instruct" 
     output_dir: str = "./dc_circuit_model_rl"
     
     # Формат модели
