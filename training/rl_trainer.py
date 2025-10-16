@@ -68,7 +68,7 @@ class DCCircuitDataset(Dataset):
                     {"role": "user", "content": question_text}
                     ],
                     "question": question_text,
-                    "answer": answer_text,  # Правильный ответ (уже используется в reward функции)
+                    "answer": answer_text, 
                     "difficulty": data.difficulty
                 })
 
@@ -114,24 +114,12 @@ class DCCircuitRLTrainer:
             dtype=self.config.dtype,
             fast_inference=True,
             gpu_memory_utilization=self.config.gpu_memory_utilization,
-            use_flash_attention=self.config.use_flash_attention,
-            device_map="auto"  # Автоматическое размещение на GPU
+            use_flash_attention=True,
+            device_map="auto"
         )
 
-        # Устанавливаем chat template
-        self.tokenizer.chat_template = """{% for message in messages %}
-            {% if message['role'] == 'system' %}
-            <|im_start|>system
-            {{ message['content'] }}<|im_end|>
-            {% elif message['role'] == 'user' %}
-            <|im_start|>user
-            {{ message['content'] }}<|im_end|>
-            {% elif message['role'] == 'assistant' %}
-            <|im_start|>assistant
-            {{ message['content'] }}<|im_end|>
-            {% endif %}
-            {% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"""
 
+        self.tokenizer.chat_template = self.config.chat_template
         # Устанавливаем pad_token если не установлен
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -181,7 +169,6 @@ class DCCircuitRLTrainer:
 
         rewards = []
 
-        # Пытаемся получить правильные ответы из различных источников
         correct_answers = None
 
         if 'answer' in kwargs and kwargs['answer'] is not None:

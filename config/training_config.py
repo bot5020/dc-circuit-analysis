@@ -15,31 +15,42 @@ class TrainingConfig:
     # Формат модели
     use_4bit: bool = False  # True для 4-bit, False для BF16
     dtype: str = "bfloat16"  # "bfloat16" или "float16"
-    use_flash_attention: bool = True  # Flash Attention 2
-    
+    chat_template: str = """{% for message in messages %}
+            {% if message['role'] == 'system' %}
+            <|im_start|>system
+            {{ message['content'] }}<|im_end|>
+            {% elif message['role'] == 'user' %}
+            <|im_start|>user
+            {{ message['content'] }}<|im_end|>
+            {% elif message['role'] == 'assistant' %}
+            <|im_start|>assistant
+            {{ message['content'] }}<|im_end|>
+            {% endif %}
+            {% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"""
+
     # LoRA параметры - усиленная регуляризация
     lora_r: int = 64
     lora_alpha: int = 64
-    lora_dropout: float = 0.1 # Увеличено с 0.1 для предотвращения переобучения
+    lora_dropout: float = 0.1 
     lora_target_modules: List[str] = None
     
     # Обучение - настройки против переобучения
-    learning_rate: float = 2e-5  # Уменьшен с 5e-5 для более стабильного обучения
-    max_steps: int = 100  # Уменьшено с 100 для предотвращения переобучения
-    save_steps: int = 25  # Соответственно уменьшено
+    learning_rate: float = 2e-5  
+    max_steps: int = 100  
+    save_steps: int = 25 
     batch_size: int = 4
     gradient_accumulation_steps: int = 1  
-    max_prompt_length: int = 2048  # Должно быть меньше max_seq_length
-    # Оптимизатор - усиленная регуляризация
+    max_prompt_length: int = 4096  
+    # Оптимизатор 
     adam_beta1: float = 0.9
     adam_beta2: float = 0.99
-    weight_decay: float = 0.2 
-    warmup_ratio: float = 0.2  
+    weight_decay: float = 0.1
+    warmup_ratio: float = 0.1  
     max_grad_norm: float = 0.1
     
-    # Генерация - синхронизировано с моделью Qwen2.5-1.5B-instruct (max 8192)
+    # Генерация 
     max_seq_length: int = 11000
-    max_completion_length: int = 4096
+    max_completion_length: int = 11000
     num_generations: int = 4
     temperature: float = 0.7
     top_p: float = 0.95
