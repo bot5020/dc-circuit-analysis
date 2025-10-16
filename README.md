@@ -199,7 +199,7 @@ def compute_reward(self, data: Data, response: str) -> float:
 TrainingConfig(
     # Модель
     model_name="unsloth/Qwen2.5-1.5B-instruct",
-    max_seq_length=11000,
+    max_seq_length=8192,   
     gpu_memory_utilization=0.35, # 35% памяти GPU под vllm 
     
     # LoRA 
