@@ -20,7 +20,7 @@ class TrainingConfig:
     # LoRA параметры - усиленная регуляризация
     lora_r: int = 64
     lora_alpha: int = 64
-    lora_dropout: float = 0.2  # Увеличено с 0.1 для предотвращения переобучения
+    lora_dropout: float = 0.1 # Увеличено с 0.1 для предотвращения переобучения
     lora_target_modules: List[str] = None
     
     # Обучение - настройки против переобучения
@@ -41,9 +41,9 @@ class TrainingConfig:
     max_seq_length: int = 11000
     max_completion_length: int = 4096
     num_generations: int = 4
-    temperature: float = 0.6
+    temperature: float = 0.7
     top_p: float = 0.95
-    repetition_penalty: float = 1.15
+    repetition_penalty: float = 1.1
     do_sample: bool = False
     gpu_memory_utilization: float = 0.35 
 

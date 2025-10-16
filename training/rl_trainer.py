@@ -186,8 +186,7 @@ class DCCircuitRLTrainer:
 
         if 'answer' in kwargs and kwargs['answer'] is not None:
             correct_answers = kwargs['answer']
-
-        # Если ничего не передано, используем резервный метод через датасет
+            print(f"✅ GRPO передал правильные ответы: {correct_answers}")
         else:
             print("⚠️ GRPO не передал правильные ответы, используем резервный метод")
             # Фоллбек на старый костыльный метод (но без question_to_answer словаря)
@@ -196,6 +195,7 @@ class DCCircuitRLTrainer:
         for idx, (prompt, completion) in enumerate(zip(prompts, completions)):
             # Получаем правильный ответ
             if correct_answers is not None and idx < len(correct_answers):
+                print('aboba')
                 correct_answer = correct_answers[idx]
             else:
                 print("⚠️ GRPO не передал правильные ответы, используем резервный метод")
